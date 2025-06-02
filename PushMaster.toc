@@ -1,0 +1,37 @@
+## Interface: 110002
+## Title: PushMaster
+## Notes: Mythic+ Keystone Performance Tracker
+## Author: Jervaise
+## Version: 0.0.2
+## IconTexture: Interface\AddOns\PushMaster\Media\flash
+## SavedVariables: PushMasterDB
+## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0, CallbackHandler-1.0
+
+# Libraries
+Libs\LibStub.lua
+Libs\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0.lua
+
+# Main addon file (load first to create PushMaster table)
+PushMaster.lua
+
+# Core modules
+Core\Constants.lua
+Core\Config.lua
+Core\Utils.lua
+Core\Database.lua
+Core\Init.lua
+
+# Data modules
+Data\DungeonData.lua
+Data\Calculator.lua
+Data\EventHandlers.lua
+
+# UI modules
+UI\MainFrame.lua
+UI\SettingsPanel.lua
+UI\SettingsFrame.lua
+UI\Themes.lua
+UI\MinimapButton.lua
+UI\TestMode.lua 

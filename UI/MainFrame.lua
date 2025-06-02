@@ -1,0 +1,507 @@
+---@class PushMasterMainFrame
+---Main UI frame for PushMaster addon
+---Displays real-time Mythic+ tracking information in a one-line format
+---Format: [⚡][🟢+15%] [🗑️][🟢+7%] [👹][🟡+1] [💀][🔴+2(+30s)]
+
+local addonName, addonTable = ...
+local PushMaster = addonTable.PushMaster
+
+-- Create MainFrame module
+local MainFrame = {}
+if not PushMaster.UI then
+  PushMaster.UI = {}
+end
+PushMaster.UI.MainFrame = MainFrame
+
+-- Local references
+local frame = nil
+local isInitialized = false
+local pendingUpdateData = nil -- Store pending update data during combat
+
+-- PERFORMANCE OPTIMIZATION: Cache last display values to prevent redundant updates
+local lastDisplayValues = {
+  overall = nil,
+  trash = nil,
+  boss = nil,
+  death = nil,
+  keystoneHeader = nil
+}
+
+-- UI elements
+local elements = {
+  displayText = nil,
+  iconTextures = {},
+  keystoneHeader = nil -- NEW: Header for keystone info
+}
+
+-- Frame settings
+local FRAME_WIDTH = 250        -- Reduced to better balance margins
+local FRAME_HEIGHT = 50        -- Increased from 30 to accommodate header
+local HEADER_HEIGHT = 18       -- Height for the keystone header
+local MAIN_CONTENT_HEIGHT = 30 -- Height for the main content area
+local FRAME_PADDING = 8
+local ICON_SIZE = 16
+local ICON_SPACING = 8
+local TEXT_SEGMENT_WIDTH = 42
+local DEATH_SEGMENT_WIDTH = 35 -- Reduced from 60 to fit 2-digit deaths without time penalty
+
+-- Color codes for WoW
+local COLORS = {
+  GREEN = "|cFF00FF00",  -- 🟢 Better performance
+  RED = "|cFFFF0000",    -- 🔴 Worse performance
+  YELLOW = "|cFFFFFF00", -- 🟡 Neutral/warning state
+  GRAY = "|cFF808080",   -- No data
+  WHITE = "|cFFFFFFFF",  -- Default text
+  RESET = "|r"           -- Reset color
+}
+
+-- Timer for regular UI updates
+local updateTimer = nil
+local UPDATE_INTERVAL = 1.0 -- Update every 1 second
+
+-- Forward declare timer functions so they can be called from MainFrame methods
+local startUpdateTimer, stopUpdateTimer
+
+---Start the UI update timer
+startUpdateTimer = function()
+  if updateTimer then
+    updateTimer:Cancel()
+  end
+
+  updateTimer = C_Timer.NewTicker(UPDATE_INTERVAL, function()
+    -- Only update if we have an active Calculator and are tracking a run
+    if PushMaster.Data and PushMaster.Data.Calculator and PushMaster.Data.Calculator:IsTrackingRun() then
+      local comparison = PushMaster.Data.Calculator:GetCurrentComparison()
+      if comparison and MainFrame:IsShown() then
+        MainFrame:UpdateDisplay(comparison)
+      end
+    end
+  end)
+end
+
+---Stop the UI update timer
+stopUpdateTimer = function()
+  if updateTimer then
+    updateTimer:Cancel()
+    updateTimer = nil
+  end
+end
+
+-- Icon paths using custom TGA files from Media folder
+local ICON_PATHS = {
+  OVERALL = "Interface\\AddOns\\PushMaster\\Media\\flash", -- ⚡ Lightning/flash for overall speed
+  TRASH = "Interface\\AddOns\\PushMaster\\Media\\bin",     -- 🗑️ Bin icon for trash
+  BOSS = "Interface\\AddOns\\PushMaster\\Media\\dragon",   -- 👹 Dragon icon for bosses
+  DEATH = "Interface\\AddOns\\PushMaster\\Media\\skull"    -- 💀 Skull icon for deaths
+}
+
+---Create icon texture
+---@param parent Frame The parent frame
+---@param iconPath string Path to the icon texture
+---@param size number Size of the icon
+---@return Texture iconTexture The created texture
+local function createIconTexture(parent, iconPath, size)
+  local texture = parent:CreateTexture(nil, "OVERLAY")
+  texture:SetTexture(iconPath)
+  texture:SetSize(size, size)
+  return texture
+end
+
+---Create the main frame
+local function createMainFrame()
+  -- Create main frame
+  frame = CreateFrame("Frame", "PushMasterMainFrame", UIParent, "BackdropTemplate")
+  frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
+  frame:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+
+  -- Set backdrop for sleek design
+  frame:SetBackdrop({
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+  })
+  frame:SetBackdropColor(0, 0, 0, 0.8)
+  frame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+  -- Create keystone header
+  elements.keystoneHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  elements.keystoneHeader:SetPoint("TOP", frame, "TOP", 0, -8)
+  elements.keystoneHeader:SetJustifyH("CENTER")
+  elements.keystoneHeader:SetTextColor(1, 0.82, 0, 1) -- Gold color
+  elements.keystoneHeader:SetText("Keystone Info")
+
+  -- Make frame movable
+  frame:SetMovable(true)
+  frame:EnableMouse(true)
+  frame:RegisterForDrag("LeftButton")
+  frame:SetScript("OnDragStart", function(self)
+    self:StartMoving()
+  end)
+  frame:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    -- Save position
+    local point, _, relativePoint, x, y = self:GetPoint()
+    if PushMasterDB and PushMasterDB.settings then
+      PushMasterDB.settings.framePosition = { point = point, relativePoint = relativePoint, x = x, y = y }
+    end
+  end)
+
+  -- Create icon textures
+  elements.iconTextures.overall = createIconTexture(frame, ICON_PATHS.OVERALL, ICON_SIZE)
+  elements.iconTextures.trash = createIconTexture(frame, ICON_PATHS.TRASH, ICON_SIZE)
+  elements.iconTextures.boss = createIconTexture(frame, ICON_PATHS.BOSS, ICON_SIZE)
+  elements.iconTextures.death = createIconTexture(frame, ICON_PATHS.DEATH, ICON_SIZE)
+
+  -- Create individual text segments with fixed positioning
+  elements.displayText = {}
+  elements.displayText.overall = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  elements.displayText.trash = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  elements.displayText.boss = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  elements.displayText.death = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+
+  -- Set text properties
+  for _, textElement in pairs(elements.displayText) do
+    textElement:SetJustifyH("LEFT")
+    textElement:SetTextColor(1, 1, 1, 1)
+  end
+
+  -- Position elements with fixed spacing - center aligned horizontally
+  -- Calculate total content width: 4 icons + 4 text segments + spacing between them
+  local totalContentWidth = (ICON_SIZE * 4) + (2 * 4) + (TEXT_SEGMENT_WIDTH * 3) + DEATH_SEGMENT_WIDTH
+  -- Account for frame backdrop insets and add 10px left margin
+  local availableWidth = FRAME_WIDTH - 8
+  local startX = (availableWidth - totalContentWidth) / 2 + 8 + 10 -- +10 for additional left margin
+  local yOffset = -8                                               -- Moved back down 2px for better spacing
+
+  local xOffset = startX
+
+  -- Overall speed: Icon + Text
+  elements.iconTextures.overall:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + ICON_SIZE + 2
+  elements.displayText.overall:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + TEXT_SEGMENT_WIDTH
+
+  -- Trash progress: Icon + Text
+  elements.iconTextures.trash:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + ICON_SIZE + 2
+  elements.displayText.trash:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + TEXT_SEGMENT_WIDTH
+
+  -- Boss progress: Icon + Text
+  elements.iconTextures.boss:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + ICON_SIZE + 2
+  elements.displayText.boss:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + TEXT_SEGMENT_WIDTH
+
+  -- Death count: Icon + Text (with extra width for time penalty)
+  elements.iconTextures.death:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+  xOffset = xOffset + ICON_SIZE + 2
+  elements.displayText.death:SetPoint("LEFT", frame, "LEFT", xOffset, yOffset)
+
+  -- Set initial text
+  elements.displayText.overall:SetText("?%")
+  elements.displayText.trash:SetText("?%")
+  elements.displayText.boss:SetText("?")
+  elements.displayText.death:SetText("0")
+
+  -- Initially hide the frame
+  frame:Hide()
+
+  PushMaster:DebugPrint("Fixed-layout main frame with icons created")
+  return frame
+end
+
+---Format percentage difference with appropriate color and better context
+---@param value number The percentage difference
+---@param isEfficiency boolean Whether this is progress efficiency (vs simple percentage)
+---@return string formattedText Colored and formatted percentage
+local function formatPercentage(value, isEfficiency)
+  if value == nil then                          -- Explicitly check for nil, as 0 is a valid value
+    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- Changed from ? to N/A for clarity
+  end
+
+  local color
+  local sign = ""
+
+  if value > 0 then
+    color = COLORS.GREEN
+    sign = "+"
+  elseif value < 0 then
+    color = COLORS.RED
+    sign = "" -- Negative sign is already included in the number
+  else
+    -- Neutral value (exactly 0) - no sign needed
+    color = COLORS.YELLOW
+    sign = ""
+  end
+
+  -- For efficiency, add context to make it clearer
+  local suffix = isEfficiency and "%" or "%"
+
+  -- Don't use math.abs - show the actual value with proper sign
+  return color .. sign .. string.format("%.0f", value) .. suffix .. COLORS.RESET
+end
+
+---Format boss count difference with appropriate color
+---@param value number The boss count difference
+---@return string formattedText Colored and formatted boss count
+local function formatBossCount(value)
+  if value == nil then                          -- Explicitly check for nil
+    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- Changed from ? to N/A for clarity
+  end
+
+  local color
+  local sign = ""
+
+  if value > 0 then
+    color = COLORS.GREEN
+    sign = "+"
+  elseif value < 0 then
+    color = COLORS.RED
+    sign = "" -- Negative sign is already included in the number
+  else
+    -- Neutral value (exactly 0) - no sign needed
+    color = COLORS.YELLOW
+    sign = ""
+  end
+
+  -- Don't use math.abs - show the actual value with proper sign
+  return color .. sign .. tostring(value) .. COLORS.RESET
+end
+
+---Format death count without time penalty
+---@param deathCount number Number of deaths
+---@param timePenalty number Time penalty in seconds (unused now)
+---@return string formattedText Colored and formatted death info
+local function formatDeaths(deathCount, timePenalty)
+  if not deathCount or deathCount == 0 then
+    return COLORS.GREEN .. "0" .. COLORS.RESET
+  end
+
+  -- Just show death count without time penalty
+  return COLORS.RED .. "+" .. deathCount .. COLORS.RESET
+end
+
+---Update the display with current comparison data
+---@param comparisonData table The comparison data from Calculator
+function MainFrame:UpdateDisplay(comparisonData)
+  if not frame or not elements.displayText then
+    return
+  end
+
+  -- PERFORMANCE OPTIMIZATION: Queue updates during combat to prevent taint
+  if InCombatLockdown() then
+    pendingUpdateData = comparisonData
+    PushMaster:DebugPrint("Queueing display update during combat")
+    return
+  end
+
+  -- Format display values
+  local overallText = formatPercentage(comparisonData.progressEfficiency, true)
+  local trashText = formatPercentage(comparisonData.trashProgress, true)
+  local bossText = formatBossCount(comparisonData.bossProgress)
+  local deathText = formatDeaths(comparisonData.progress.deaths, comparisonData.deathTimePenalty)
+  local keystoneText = string.format("%s +%d", comparisonData.dungeon or "Unknown", comparisonData.level or 0)
+
+  -- PERFORMANCE OPTIMIZATION: Only update text when it actually changes
+  if overallText ~= lastDisplayValues.overall then
+    elements.displayText.overall:SetText(overallText)
+    lastDisplayValues.overall = overallText
+  end
+
+  if trashText ~= lastDisplayValues.trash then
+    elements.displayText.trash:SetText(trashText)
+    lastDisplayValues.trash = trashText
+  end
+
+  if bossText ~= lastDisplayValues.boss then
+    elements.displayText.boss:SetText(bossText)
+    lastDisplayValues.boss = bossText
+  end
+
+  if deathText ~= lastDisplayValues.death then
+    elements.displayText.death:SetText(deathText)
+    lastDisplayValues.death = deathText
+  end
+
+  -- Update keystone header only if changed
+  if keystoneText ~= lastDisplayValues.keystoneHeader then
+    elements.keystoneHeader:SetText(keystoneText)
+    lastDisplayValues.keystoneHeader = keystoneText
+  end
+end
+
+---Process any pending updates after leaving combat
+function MainFrame:ProcessPendingUpdates()
+  if pendingUpdateData then
+    PushMaster:DebugPrint("Processing pending display update after combat")
+    self:UpdateDisplay(pendingUpdateData)
+    pendingUpdateData = nil
+  end
+end
+
+---Reset cached display values (call when frame is hidden/reset)
+function MainFrame:ResetDisplayCache()
+  lastDisplayValues = {
+    overall = nil,
+    trash = nil,
+    boss = nil,
+    death = nil,
+    keystoneHeader = nil
+  }
+  PushMaster:DebugPrint("Display cache reset")
+end
+
+---Show the main frame
+function MainFrame:Show()
+  if frame then
+    frame:Show()
+    startUpdateTimer() -- Start regular updates when showing
+    PushMaster:DebugPrint("MainFrame shown")
+  end
+end
+
+---Hide the main frame
+function MainFrame:Hide()
+  if frame then
+    frame:Hide()
+    stopUpdateTimer() -- Stop updates when hiding
+    -- PERFORMANCE OPTIMIZATION: Reset display cache when hiding frame
+    self:ResetDisplayCache()
+    PushMaster:DebugPrint("MainFrame hidden")
+  end
+end
+
+---Check if the main frame is shown
+---@return boolean isShown True if the frame is shown
+function MainFrame:IsShown()
+  return frame and frame:IsShown() or false
+end
+
+---Get the actual frame object
+---@return Frame|nil frame The main frame object or nil if not initialized
+function MainFrame:GetFrame()
+  return frame
+end
+
+---Toggle the main frame visibility
+function MainFrame:Toggle()
+  if self:IsShown() then
+    self:Hide()
+  else
+    self:Show()
+  end
+end
+
+---Reset the main frame position to default
+function MainFrame:ResetPosition()
+  if not frame then
+    PushMaster:DebugPrint("MainFrame not initialized, cannot reset position")
+    return false
+  end
+
+  -- Reset to default position (center-top of screen)
+  frame:ClearAllPoints()
+  frame:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+
+  -- Clear saved position
+  if PushMasterDB and PushMasterDB.settings then
+    PushMasterDB.settings.framePosition = nil
+  end
+
+  PushMaster:DebugPrint("MainFrame position reset to default")
+  return true
+end
+
+---Load saved frame position
+local function loadFramePosition()
+  if not frame or not PushMasterDB or not PushMasterDB.settings or not PushMasterDB.settings.framePosition then
+    return
+  end
+
+  local pos = PushMasterDB.settings.framePosition
+  frame:ClearAllPoints()
+  frame:SetPoint(pos.point or "CENTER", UIParent, pos.relativePoint or "CENTER", pos.x or 0, pos.y or 200)
+
+  PushMaster:DebugPrint("MainFrame position loaded from saved settings")
+end
+
+---Setup event handlers for the frame
+local function setupEventHandlers()
+  if not frame then
+    return
+  end
+
+  -- Frame is already set up with drag handlers in createMainFrame
+  -- This function is here for future event handler additions
+  PushMaster:DebugPrint("MainFrame event handlers setup")
+end
+
+---Initialize the main frame
+function MainFrame:Initialize()
+  if frame then
+    return
+  end
+
+  frame = createMainFrame()
+
+  -- Apply saved scale setting
+  if PushMasterDB and PushMasterDB.settings and PushMasterDB.settings.frameScale then
+    frame:SetScale(PushMasterDB.settings.frameScale)
+  end
+
+  setupEventHandlers()
+  loadFramePosition()
+
+  -- Register for dungeon events to auto-show/hide
+  frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+  frame:RegisterEvent("CHALLENGE_MODE_START")
+  frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+  frame:RegisterEvent("CHALLENGE_MODE_RESET")
+
+  -- Register for combat events to handle pending updates
+  frame:RegisterEvent("PLAYER_REGEN_ENABLED")  -- Leaving combat
+  frame:RegisterEvent("PLAYER_REGEN_DISABLED") -- Entering combat
+
+  frame:SetScript("OnEvent", function(self, event, ...)
+    MainFrame:OnEvent(event, ...)
+  end)
+
+  PushMaster:DebugPrint("MainFrame initialized with fixed-layout design and combat awareness")
+end
+
+---Handle events for auto-show/hide functionality
+function MainFrame:OnEvent(event, ...)
+  if event == "ZONE_CHANGED_NEW_AREA" or
+      event == "CHALLENGE_MODE_START" or
+      event == "CHALLENGE_MODE_COMPLETED" or
+      event == "CHALLENGE_MODE_RESET" then
+    -- Check if we're in a Mythic+ dungeon
+    if PushMaster.Data and PushMaster.Data.EventHandlers then
+      local inMythicPlus = PushMaster.Data.EventHandlers:IsInMythicPlus()
+
+      if inMythicPlus then
+        -- Auto-show in Mythic+ dungeons
+        self:Show()
+        PushMaster:DebugPrint("Auto-showing MainFrame in Mythic+ dungeon")
+      else
+        -- Auto-hide when leaving dungeon (unless settings panel is open)
+        local settingsOpen = PushMaster.UI and PushMaster.UI.SettingsFrame and PushMaster.UI.SettingsFrame:IsShown()
+        if not settingsOpen then
+          self:Hide()
+          PushMaster:DebugPrint("Auto-hiding MainFrame outside Mythic+ dungeon")
+        end
+      end
+    end
+  elseif event == "PLAYER_REGEN_ENABLED" then
+    -- Player left combat - process any pending updates
+    PushMaster:DebugPrint("Player left combat - checking for pending updates")
+    self:ProcessPendingUpdates()
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    -- Player entered combat
+    PushMaster:DebugPrint("Player entered combat - display updates will be queued")
+  end
+end
