@@ -174,7 +174,7 @@ local function createSettingsFrame()
   -- Info title
   local infoTitle = infoArea:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   infoTitle:SetPoint("TOP", infoArea, "TOP", 0, 0)
-  infoTitle:SetText("PushMaster: Mythic+ Performance Tracker")
+  infoTitle:SetText("PushMaster: Real-time M+ Delta Analyzer")
   infoTitle:SetTextColor(1, 0.82, 0) -- WoW Gold
 
   -- Info description
@@ -182,7 +182,7 @@ local function createSettingsFrame()
   infoDesc:SetPoint("TOP", infoTitle, "BOTTOM", 0, -10)
   infoDesc:SetWidth(500)
   infoDesc:SetJustifyH("CENTER")
-  infoDesc:SetText("Track and compare your Mythic+ performance with best times and real-time analysis")
+  infoDesc:SetText("Shows real-time pace analysis: are you ahead or behind your best time for successful key pushing?")
   infoDesc:SetTextColor(0.8, 0.8, 0.8)
 
   -- Main content area (container for two boxes)
@@ -371,7 +371,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.1"   -- Fallback version
+    local version = "0.9.2"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -682,7 +682,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.1"   -- Fallback version
+    local version = "0.9.2"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first

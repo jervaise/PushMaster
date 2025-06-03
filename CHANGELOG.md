@@ -5,6 +5,20 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2024-12-19
+
+### Changed
+- **Clearer Positioning**: Repositioned PushMaster as a "Real-time Mythic+ Delta Analyzer"
+- **Improved Descriptions**: Updated TOC notes and UI descriptions to clearly explain the core purpose
+- **Better Documentation**: Completely rewrote README to focus on delta analysis and key pushing
+- **Clearer Value Proposition**: Emphasizes answering "Am I ahead or behind pace?" for successful key pushing
+
+### Technical
+- Updated TOC Notes field to better describe real-time delta analysis
+- Enhanced UI descriptions in SettingsFrame for clarity
+- Comprehensive README rewrite focusing on core delta analysis concept
+- Better explanation of intelligent weighting and milestone tracking
+
 ## [0.9.1] - 2024-12-19
 
 ### Changed

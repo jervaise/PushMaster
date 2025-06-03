@@ -1,98 +1,75 @@
-# PushMaster - Intelligent Mythic+ Performance Tracker
+# PushMaster - Real-time Mythic+ Delta Analyzer
 
-**Version**: 0.9.1  
+**Version**: 0.9.2  
 **Author**: Jervaise  
 **WoW Version**: 11.1.5+ (The War Within Season 2)
 
-A simplified yet intelligent addon for tracking Mythic+ dungeon performance in **The War Within Season 2** (11.1.5+). PushMaster provides precise, actionable feedback without overwhelming users with information.
+## 🎯 What is PushMaster?
+
+**PushMaster is a real-time Mythic+ delta analyzer** that answers one critical question: **"Am I ahead or behind the pace needed to time this key?"**
+
+Unlike simple timers, PushMaster compares your current run against your personal best times and shows you **live delta analysis** - whether you're gaining or losing time relative to your successful runs. Perfect for pushing higher keys where every second matters.
+
+### 🚀 Core Concept: Delta Analysis
+
+- **Green (+15s)**: You're 15 seconds **ahead** of your best pace
+- **Red (-23s)**: You're 23 seconds **behind** your best pace  
+- **Intelligent Weighting**: Bosses and trash are weighted based on actual difficulty per dungeon
+- **Real-time Updates**: See your pace change as you progress through the dungeon
 
 ## ✨ Key Features
 
-### 🎯 **Simplified Design**
-- **One-line display** with essential metrics only
-- **Smart activation** - only shows for keys +12 and above
-- **Clean interface** - no clutter, just what you need
-- **Streamlined commands** - single `/pm` command for easy access
-
-### 🧠 **Intelligent Analysis**
-- **Dynamic Weight Calculation** - Automatically calculates boss vs trash importance based on YOUR best run data
-- **Per-Boss Intelligence** - Each boss gets its own difficulty rating and impact weight
-- **Milestone-based comparisons** instead of linear assumptions
-- **Learns from your actual performance patterns**
-- **Dungeon-specific intelligence** - each dungeon gets its own realistic weights
-
-### 📊 **Core Metrics**
-- **⚡ Progress Efficiency**: Overall performance vs best run patterns (dynamically weighted)
-- **🗑️ Trash Progress**: Milestone-based trash comparison  
-- **👹 Boss Progress**: Precise boss timing difference with per-boss difficulty weighting
-- **💀 Death Impact**: Clear death penalty tracking
-
-### 🖱️ **Easy Access**
-- **Minimap Button**: Left-click to open settings
-- **Slash Command**: Type `/pm` to toggle settings window
-- **Auto-positioning**: Drag displays to move them
+- **🎯 Live Delta Display**: Instant feedback on whether you're ahead/behind schedule
+- **🧠 Intelligent Analysis**: Dynamic boss weighting based on actual fight difficulty
+- **📊 Smart Pacing**: Accounts for trash vs boss time ratios per dungeon
+- **⚡ Simplified Design**: Clean, minimal interface focused on the data that matters
+- **🔄 Automatic Learning**: Improves accuracy with each completed run
 
 ## 🎮 Why Keys +12 and Above?
 
-In **The War Within Season 2**, affixes no longer rotate at higher key levels, making performance more predictable and meaningful for comparison. PushMaster focuses on this range where:
-- Performance patterns are consistent
-- Intelligent analysis provides real value
-- Comparisons are meaningful and actionable
+PushMaster focuses on **serious key pushing** where timing precision matters most. In lower keys, completion is usually guaranteed - but in +12 and above, every second of pace analysis becomes critical for success.
 
-## 🔧 How It Works
+## 📊 How Delta Analysis Works
 
-### **Dynamic Weight Calculation**
-PushMaster analyzes your best run data to calculate how much time is actually spent on bosses vs trash in each specific dungeon, with **individual boss difficulty ratings**:
-
+### **Real-time Pace Comparison**
 ```
-Example: Necrotic Wake +15
-- Boss 1 (Blightbone): 1.2 min fight, Difficulty 2.0, Weight 4.3%
-- Boss 2 (Amarth): 2.1 min fight, Difficulty 3.5, Weight 7.6%  
-- Boss 3 (Surgeon): 1.8 min fight, Difficulty 3.0, Weight 6.5%
-- Boss 4 (Nalthor): 2.4 min fight, Difficulty 4.0, Weight 8.7%
-- Trash clearing: 20.5 minutes (72.9% of total time)
-
-Dynamic Weights:
-- Trash Progress: 51.1% weight (reflects actual time spent)
-- Boss Timing: 13.1% weight (reflects actual boss fight time)  
-- Boss Count: 13.1% weight (per-boss difficulty weighted)
-- Individual Boss Impact: Harder bosses = higher impact when ahead/behind
+Current Run:  12:34 elapsed
+Best Time:    11:50 at this point  
+Delta:        -44s (behind pace)
 ```
 
-This means:
-- **Each boss** gets its own difficulty rating based on fight duration
-- **Harder bosses** (longer fights) have more impact when you're ahead/behind
-- **Trash-heavy dungeons** weight trash performance more heavily
-- **Boss-heavy dungeons** weight boss performance more heavily
-- **Every component** adapts to YOUR actual run data
+### **Intelligent Weight Distribution**
+PushMaster analyzes your completed runs to understand each dungeon's difficulty pattern:
 
-### **Intelligent Pace Calculation**
-- **Milestone Interpolation**: Uses actual progress points from your best run
-- **Per-Boss Timing Analysis**: Compares individual boss kill speeds with difficulty weighting
-- **Context-Aware**: Understands dungeon flow and pacing
-- **Boss Difficulty Learning**: Identifies which bosses are hardest for your group
-
-### **Display Format**
 ```
-[⚡][🟢+8%] [🗑️][🟡-2%] [👹][🟢+1] [💀][🔴2(+30s)]
+Example: Ara-Kara Analysis
+Boss Fight Durations:
+  Avanoxx:    45s (Weight: 18%) - Quick fight
+  Anub'zekt:  75s (Weight: 32%) - Major difficulty spike  
+  Ki'katal:   52s (Weight: 22%) - Moderate difficulty
+  
+Dynamic Weights Applied:
+  Trash Progress: 65% (majority of time spent)
+  Boss Progress:  35% (weighted by individual difficulty)
 ```
 
-## 🚀 Installation
+### **Smart Milestone Tracking**
+- Tracks progress at 5% dungeon completion increments
+- Compares your current pace to your best run at each milestone
+- Accounts for route variations and different pull strategies
 
-1. Download and extract to your `Interface/AddOns/` folder
-2. Restart World of Warcraft
-3. Start running keys +12 and above
-4. PushMaster automatically learns and provides intelligent feedback
+## 🚀 Getting Started
 
-## ⚙️ Configuration
+1. **Install** PushMaster addon
+2. **Complete** a few +12 or higher keys to build baseline data
+3. **Watch** the real-time delta display during future runs
+4. **Push** higher keys with confidence knowing your exact pace!
 
-PushMaster works automatically with minimal configuration needed:
-- **Settings Access**: Click minimap button or type `/pm`
-- **Auto-positioning**: Drag the display to move it
-- **Smart tooltips**: Hover for detailed information
-- **Automatic learning**: Improves accuracy with each run
+### **Commands**
+- `/pm` - Toggle settings window
+- Left-click minimap button - Open settings
 
-## 🔬 Technical Improvements (v0.9.1)
+## 🔬 Technical Improvements (v0.9.2)
 
 ### **Streamlined Interface**
 - **Single Command**: `/pm` command replaces multiple slash commands
@@ -160,9 +137,9 @@ Test scenarios include:
 
 For issues, suggestions, or contributions:
 - **Author**: Jervaise
-- **Version**: 0.9.1
-- **Focus**: Simplified intelligence for serious key pushers
+- **Version**: 0.9.2
+- **Focus**: Real-time Mythic+ delta analysis for serious key pushing
 
 ---
 
-PushMaster: **Simple interface. Intelligent analysis. Better performance.** 
+**PushMaster** - Because every second matters when pushing keys. Know your pace, push with confidence! 🚀 
