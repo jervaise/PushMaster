@@ -33,11 +33,11 @@ local BASELINE_BEST_TIMES = {
       time = 1620, -- 27:00 - moderate difficulty
       date = "2025-01-01 12:00:00",
       deaths = 2,
-      affixes = { 10, 8, 3, 152 },                                       -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                        -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Brew Master Aldryr", killTime = 420,  bossNumber = 1 }, -- 7:00
         { name = "I'pa",               killTime = 900,  bossNumber = 2 }, -- 15:00
-        { name = "Benk Buzzbee",       killTime = 1380, bossNumber = 3 } -- 23:00
+        { name = "Benk Buzzbee",       killTime = 1380, bossNumber = 3 }  -- 23:00
       },
       trashSamples = {
         { time = 180,  trash = 10 },
@@ -60,11 +60,11 @@ local BASELINE_BEST_TIMES = {
       time = 1560, -- 26:00 - moderate difficulty
       date = "2025-01-01 12:00:00",
       deaths = 1,
-      affixes = { 10, 8, 3, 152 },                                    -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                     -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Ol' Waxbeard",    killTime = 360,  bossNumber = 1 }, -- 6:00
         { name = "Blazikon",        killTime = 780,  bossNumber = 2 }, -- 13:00
-        { name = "The Candle King", killTime = 1320, bossNumber = 3 } -- 22:00
+        { name = "The Candle King", killTime = 1320, bossNumber = 3 }  -- 22:00
       },
       trashSamples = {
         { time = 180,  trash = 10 },
@@ -87,11 +87,11 @@ local BASELINE_BEST_TIMES = {
       time = 1680, -- 28:00 - higher difficulty
       date = "2025-01-01 12:00:00",
       deaths = 3,
-      affixes = { 10, 8, 3, 152 },                                          -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                           -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Kyrioss",               killTime = 480,  bossNumber = 1 }, -- 8:00
         { name = "Stormguard Gorren",     killTime = 960,  bossNumber = 2 }, -- 16:00
-        { name = "Voidstone Monstrosity", killTime = 1440, bossNumber = 3 } -- 24:00
+        { name = "Voidstone Monstrosity", killTime = 1440, bossNumber = 3 }  -- 24:00
       },
       trashSamples = {
         { time = 240,  trash = 10 },
@@ -114,11 +114,11 @@ local BASELINE_BEST_TIMES = {
       time = 1620, -- 27:00 - moderate difficulty
       date = "2025-01-01 12:00:00",
       deaths = 2,
-      affixes = { 10, 8, 3, 152 },                                      -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                       -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Captain Dailcry",   killTime = 420,  bossNumber = 1 }, -- 7:00
         { name = "Baron Braunpyke",   killTime = 840,  bossNumber = 2 }, -- 14:00
-        { name = "Prioress Murrpray", killTime = 1500, bossNumber = 3 } -- 25:00
+        { name = "Prioress Murrpray", killTime = 1500, bossNumber = 3 }  -- 25:00
       },
       trashSamples = {
         { time = 180,  trash = 10 },
@@ -141,11 +141,11 @@ local BASELINE_BEST_TIMES = {
       time = 1740, -- 29:00 - higher difficulty
       date = "2025-01-01 12:00:00",
       deaths = 4,
-      affixes = { 10, 8, 3, 152 },                                                 -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                                  -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Coin-Operated Crowd Pummeler", killTime = 480,  bossNumber = 1 }, -- 8:00
         { name = "Azerokk",                      killTime = 960,  bossNumber = 2 }, -- 16:00
-        { name = "Rixxa Fluxflame",              killTime = 1560, bossNumber = 3 } -- 26:00
+        { name = "Rixxa Fluxflame",              killTime = 1560, bossNumber = 3 }  -- 26:00
       },
       trashSamples = {
         { time = 240,  trash = 10 },
@@ -168,11 +168,11 @@ local BASELINE_BEST_TIMES = {
       time = 1500, -- 25:00 - lower difficulty
       date = "2025-01-01 12:00:00",
       deaths = 1,
-      affixes = { 10, 8, 3, 152 },                                     -- Fortified, Sanguine, Volcanic, Challenger's Peril
+      affixes = { 10, 8, 3, 152 },                                      -- Fortified, Sanguine, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "Speaker Brokk",    killTime = 360,  bossNumber = 1 }, -- 6:00
         { name = "E.D.N.A",          killTime = 720,  bossNumber = 2 }, -- 12:00
-        { name = "The Coaglamation", killTime = 1260, bossNumber = 3 } -- 21:00
+        { name = "The Coaglamation", killTime = 1260, bossNumber = 3 }  -- 21:00
       },
       trashSamples = {
         { time = 150,  trash = 10 },
@@ -195,12 +195,12 @@ local BASELINE_BEST_TIMES = {
       time = 1560, -- 26:00 - moderate difficulty
       date = "2025-01-01 12:00:00",
       deaths = 1,
-      affixes = { 7, 11, 3, 152 },                                              -- Tyrannical, Bursting, Volcanic, Challenger's Peril
+      affixes = { 7, 11, 3, 152 },                                               -- Tyrannical, Bursting, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "An Affront of Challengers", killTime = 420,  bossNumber = 1 }, -- 7:00
         { name = "Gorechop",                  killTime = 780,  bossNumber = 2 }, -- 13:00
         { name = "Xav the Unfallen",          killTime = 1140, bossNumber = 3 }, -- 19:00
-        { name = "Kul'tharok",                killTime = 1440, bossNumber = 4 } -- 24:00
+        { name = "Kul'tharok",                killTime = 1440, bossNumber = 4 }  -- 24:00
       },
       trashSamples = {
         { time = 180,  trash = 10 },
@@ -223,12 +223,12 @@ local BASELINE_BEST_TIMES = {
       time = 1800, -- 30:00 - highest difficulty
       date = "2025-01-01 12:00:00",
       deaths = 5,
-      affixes = { 8, 11, 3, 152 },                                          -- Fortified, Bursting, Volcanic, Challenger's Peril
+      affixes = { 8, 11, 3, 152 },                                           -- Fortified, Bursting, Volcanic, Challenger's Peril
       bossKillTimes = {
         { name = "The Platinum Pummeler", killTime = 660,  bossNumber = 1 }, -- 11:00
         { name = "Gnomercy 4.U.",         killTime = 1140, bossNumber = 2 }, -- 19:00
         { name = "Machinist's Garden",    killTime = 1440, bossNumber = 3 }, -- 24:00
-        { name = "King Mechagon",         killTime = 1740, bossNumber = 4 } -- 29:00
+        { name = "King Mechagon",         killTime = 1740, bossNumber = 4 }  -- 29:00
       },
       trashSamples = {
         { time = 300,  trash = 10 },
@@ -324,4 +324,15 @@ end
 ---@return string|nil dungeonName The dungeon name or nil if not found
 function BaselineBestTimes:GetDungeonName(mapID)
   return SEASON_2_MAP_IDS[mapID]
+end
+
+---Get baseline time for a specific dungeon and key level
+---@param mapID number The map ID
+---@param keyLevel number The key level
+---@return table|nil baselineTime The baseline time data or nil if not found
+function BaselineBestTimes:GetBaselineTime(mapID, keyLevel)
+  if BASELINE_BEST_TIMES[mapID] and BASELINE_BEST_TIMES[mapID][keyLevel] then
+    return BASELINE_BEST_TIMES[mapID][keyLevel]
+  end
+  return nil
 end
