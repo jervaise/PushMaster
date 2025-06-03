@@ -369,27 +369,35 @@ local function loadSettings()
   elements.scaleSlider:SetValue(scale)
   elements.scaleSlider.text:SetText(string.format("%.0f%%", scale * 100))
 
-  -- Update version and author text from centralized values
+  -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = PushMaster.version
-    local author = PushMaster.author
+    local version = "0.9.1"   -- Fallback version
+    local author = "Jervaise" -- Fallback author
 
-    -- Check if metadata has been loaded yet (not still "Loading...")
-    if version == "Loading..." or author == "Loading..." then
-      -- Try to load metadata directly if GetAddOnMetadata is available
-      if GetAddOnMetadata then
-        version = GetAddOnMetadata(addonName, "Version") or "0.0.2"
-        author = GetAddOnMetadata(addonName, "Author") or "Unknown"
+    -- Always try to get the latest version from TOC metadata first
+    if GetAddOnMetadata then
+      local tocVersion = GetAddOnMetadata(addonName, "Version")
+      local tocAuthor = GetAddOnMetadata(addonName, "Author")
 
-        -- Update the centralized values if we successfully got them
-        if version ~= "0.0.2" then -- Only update if we got a real version
-          PushMaster.version = version
-          PushMaster.author = author
-        end
-      else
-        -- GetAddOnMetadata not available yet, use fallback
-        version = "0.0.2"
-        author = "Jervaise"
+      if tocVersion then
+        version = tocVersion
+        -- Update the centralized PushMaster version to keep it in sync
+        PushMaster.version = version
+      end
+
+      if tocAuthor then
+        author = tocAuthor
+        -- Update the centralized PushMaster author to keep it in sync
+        PushMaster.author = author
+      end
+    else
+      -- If GetAddOnMetadata is not available, use the stored PushMaster values
+      if PushMaster.version and PushMaster.version ~= "Loading..." then
+        version = PushMaster.version
+      end
+
+      if PushMaster.author and PushMaster.author ~= "Loading..." then
+        author = PushMaster.author
       end
     end
 
@@ -674,25 +682,33 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = PushMaster.version
-    local author = PushMaster.author
+    local version = "0.9.1"   -- Fallback version
+    local author = "Jervaise" -- Fallback author
 
-    -- Check if metadata has been loaded yet (not still "Loading...")
-    if version == "Loading..." or author == "Loading..." then
-      -- Try to load metadata directly if GetAddOnMetadata is available
-      if GetAddOnMetadata then
-        version = GetAddOnMetadata(addonName, "Version") or "0.0.2"
-        author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
+    -- Always try to get the latest version from TOC metadata first
+    if GetAddOnMetadata then
+      local tocVersion = GetAddOnMetadata(addonName, "Version")
+      local tocAuthor = GetAddOnMetadata(addonName, "Author")
 
-        -- Update the centralized values if we successfully got them
-        if version ~= "0.0.2" then -- Only update if we got a real version
-          PushMaster.version = version
-          PushMaster.author = author
-        end
-      else
-        -- GetAddOnMetadata not available yet, use fallback
-        version = "0.0.2"
-        author = "Jervaise"
+      if tocVersion then
+        version = tocVersion
+        -- Update the centralized PushMaster version to keep it in sync
+        PushMaster.version = version
+      end
+
+      if tocAuthor then
+        author = tocAuthor
+        -- Update the centralized PushMaster author to keep it in sync
+        PushMaster.author = author
+      end
+    else
+      -- If GetAddOnMetadata is not available, use the stored PushMaster values
+      if PushMaster.version and PushMaster.version ~= "Loading..." then
+        version = PushMaster.version
+      end
+
+      if PushMaster.author and PushMaster.author ~= "Loading..." then
+        author = PushMaster.author
       end
     end
 
