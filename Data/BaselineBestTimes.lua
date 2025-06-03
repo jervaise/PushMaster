@@ -248,55 +248,58 @@ local BASELINE_BEST_TIMES = {
 
 ---Initialize baseline best times in the Calculator
 function BaselineBestTimes:Initialize()
-  PushMaster:DebugPrint("BaselineBestTimes module initialized")
+  PushMaster:DebugPrint("BaselineBestTimes module initialized - baseline data available as fallback only")
 
-  -- Import baseline data into Calculator if no existing data
+  -- Baseline data is now kept only in code and used as fallback
+  -- No longer importing baseline data into saved variables to reduce file size
+  PushMaster:DebugPrint("Baseline data available for " .. table.getn(SEASON_2_MAP_IDS) .. " Season 2 dungeons")
+
+  -- Clean up any existing baseline data from saved variables
+  self:CleanupBaselineFromSavedVars()
+end
+
+---Clean up baseline data from saved variables to reduce file size
+function BaselineBestTimes:CleanupBaselineFromSavedVars()
   local Calculator = PushMaster.Data.Calculator
-  if Calculator then
-    local existingBestTimes = Calculator:GetBestTimes()
-    local hasNewData = false
+  if not Calculator then
+    return
+  end
 
-    -- Check each dungeon and add baseline if no data exists
-    for mapID, dungeonName in pairs(SEASON_2_MAP_IDS) do
-      if not existingBestTimes[mapID] or not existingBestTimes[mapID][12] then
-        hasNewData = true
-        PushMaster:DebugPrint("Adding baseline best time for " .. dungeonName .. " +12")
+  local existingBestTimes = Calculator:GetBestTimes()
+  local cleanedData = {}
+  local removedCount = 0
+
+  -- Copy only non-baseline data (data that differs from baseline)
+  for mapID, levels in pairs(existingBestTimes) do
+    for level, data in pairs(levels) do
+      local baselineData = self:GetBaselineTime(mapID, level)
+
+      -- Keep the data if it's not baseline data (different time, date, etc.)
+      local isBaseline = false
+      if baselineData then
+        -- Check if this matches baseline data exactly
+        if data.time == baselineData.time and
+            data.date == baselineData.date and
+            data.deaths == baselineData.deaths then
+          isBaseline = true
+          removedCount = removedCount + 1
+        end
+      end
+
+      if not isBaseline then
+        if not cleanedData[mapID] then
+          cleanedData[mapID] = {}
+        end
+        cleanedData[mapID][level] = data
       end
     end
+  end
 
-    if hasNewData then
-      -- Merge baseline data with existing data
-      local mergedData = {}
-
-      -- Copy existing data first
-      for mapID, levels in pairs(existingBestTimes) do
-        mergedData[mapID] = {}
-        for level, data in pairs(levels) do
-          mergedData[mapID][level] = data
-        end
-      end
-
-      -- Add baseline data where missing
-      for mapID, levels in pairs(BASELINE_BEST_TIMES) do
-        if not mergedData[mapID] then
-          mergedData[mapID] = {}
-        end
-
-        for level, data in pairs(levels) do
-          if not mergedData[mapID][level] then
-            mergedData[mapID][level] = data
-            PushMaster:Print("Added baseline best time: " .. SEASON_2_MAP_IDS[mapID] .. " +12 (" ..
-              string.format("%.1f", data.time / 60) .. " min)")
-          end
-        end
-      end
-
-      -- Import the merged data
-      Calculator:ImportBestTimes(mergedData)
-      PushMaster:Print("Baseline best times loaded for Season 2 dungeons")
-    else
-      PushMaster:DebugPrint("All Season 2 dungeons already have best times - skipping baseline import")
-    end
+  if removedCount > 0 then
+    Calculator:ImportBestTimes(cleanedData)
+    PushMaster:Print(string.format("Cleaned up %d baseline entries from saved variables", removedCount))
+  else
+    PushMaster:DebugPrint("No baseline data found in saved variables to clean up")
   end
 end
 

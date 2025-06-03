@@ -316,21 +316,9 @@ function Calculator:GetBestTime()
 
   local instanceData = currentRun.instanceData
 
-  -- First, try to get personal best time
   if bestTimes[instanceData.currentMapID] and
       bestTimes[instanceData.currentMapID][instanceData.cmLevel] then
     return bestTimes[instanceData.currentMapID][instanceData.cmLevel]
-  end
-
-  -- If no personal best time exists, fall back to baseline data
-  if PushMaster.Data.BaselineBestTimes then
-    local baselineTime = PushMaster.Data.BaselineBestTimes:GetBaselineTime(instanceData.currentMapID,
-      instanceData.cmLevel)
-    if baselineTime then
-      PushMaster:DebugPrint(string.format("Using baseline data for comparison: Map %d, Level %d",
-        instanceData.currentMapID, instanceData.cmLevel))
-      return baselineTime
-    end
   end
 
   return nil
