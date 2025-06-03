@@ -10,7 +10,7 @@ PushMaster = {}
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "Loading..."
+PushMaster.version = "0.9.1"
 PushMaster.author = "Loading..."
 
 -- Debug mode flag
@@ -58,7 +58,7 @@ local function onAddonLoaded(loadedAddonName)
   -- Initialize saved variables (use placeholder version for now)
   if not PushMasterDB then
     PushMasterDB = {
-      version = "0.9.0", -- Use hardcoded version for initial setup
+      version = "0.9.1", -- Use hardcoded version for initial setup
       bestTimes = {},
       settings = {
         debugMode = false,
@@ -106,12 +106,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.9.0"
+      PushMaster.version = "0.9.1"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.0"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.1"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC

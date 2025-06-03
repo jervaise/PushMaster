@@ -605,13 +605,14 @@ end
 
 ---Calculate dynamic weights based on actual time spent on bosses vs trash
 ---@param bestTime table Best time data with boss kill times and trash milestones
----@return table weights Table containing bossWeight and trashWeight
+---@return table weights Table containing bossWeight, trashWeight, and per-boss weights
 function Calculator:CalculateDungeonWeights(bestTime)
   local bossKillTimes = bestTime.bossKillTimes or {}
   local trashSamples = bestTime.trashSamples or {}
   local totalTime = bestTime.time or 1800 -- fallback to 30 minutes
 
-  -- Calculate total time spent on bosses
+  -- Calculate individual boss fight durations and difficulties
+  local bossData = {}
   local totalBossTime = 0
   local previousTime = 0
 
@@ -627,42 +628,128 @@ function Calculator:CalculateDungeonWeights(bestTime)
       end
 
       -- Estimate boss fight duration (time from when trash was done to boss kill)
-      -- This is an approximation since we don't have exact boss start times
       local estimatedBossFightTime = math.max(30, bossKill.killTime - trashTimeBeforeBoss)
       totalBossTime = totalBossTime + estimatedBossFightTime
 
+      -- Calculate relative difficulty weight for this specific boss
+      local bossWeight = estimatedBossFightTime / totalTime
+
+      bossData[i] = {
+        name = bossKill.name or ("Boss " .. i),
+        fightTime = estimatedBossFightTime,
+        killTime = bossKill.killTime,
+        weight = bossWeight,
+        difficultyRating = estimatedBossFightTime / 60 -- Bosses taking longer are "harder"
+      }
+
       PushMaster:DebugPrint(string.format(
-        "Boss %d (%s): Kill at %.1fs, Trash before at %.1fs, Estimated fight time %.1fs",
-        i, bossKill.name or "Unknown", bossKill.killTime, trashTimeBeforeBoss, estimatedBossFightTime))
+        "Boss %d (%s): Kill at %.1fs, Fight time %.1fs, Weight %.3f (%.1f%% of total time)",
+        i, bossKill.name or "Unknown", bossKill.killTime, estimatedBossFightTime, bossWeight, bossWeight * 100))
     end
   end
 
   -- Calculate time spent on trash (total time minus boss time)
   local totalTrashTime = totalTime - totalBossTime
 
-  -- Calculate weights as percentages of total time
-  local bossWeight = totalBossTime / totalTime
-  local trashWeight = totalTrashTime / totalTime
+  -- Calculate overall category weights
+  local overallBossWeight = totalBossTime / totalTime
+  local overallTrashWeight = totalTrashTime / totalTime
 
   -- Ensure weights are reasonable (minimum 10% each, maximum 90% each)
-  bossWeight = math.max(0.1, math.min(0.9, bossWeight))
-  trashWeight = math.max(0.1, math.min(0.9, trashWeight))
+  overallBossWeight = math.max(0.1, math.min(0.9, overallBossWeight))
+  overallTrashWeight = math.max(0.1, math.min(0.9, overallTrashWeight))
 
   -- Normalize weights to sum to 1.0
-  local totalWeight = bossWeight + trashWeight
-  bossWeight = bossWeight / totalWeight
-  trashWeight = trashWeight / totalWeight
+  local totalWeight = overallBossWeight + overallTrashWeight
+  overallBossWeight = overallBossWeight / totalWeight
+  overallTrashWeight = overallTrashWeight / totalWeight
+
+  -- Calculate individual boss importance within the boss category
+  for i = 1, #bossData do
+    if totalBossTime > 0 then
+      bossData[i].categoryWeight = bossData[i].fightTime / totalBossTime
+      bossData[i].absoluteWeight = bossData[i].weight / totalWeight
+    else
+      bossData[i].categoryWeight = 1 / #bossData -- Equal weight if no timing data
+      bossData[i].absoluteWeight = overallBossWeight / #bossData
+    end
+  end
 
   PushMaster:DebugPrint(string.format(
-    "Dynamic weights calculated: Boss %.1f%% (%.1fs), Trash %.1f%% (%.1fs), Total %.1fs",
-    bossWeight * 100, totalBossTime, trashWeight * 100, totalTrashTime, totalTime))
+    "Dynamic weights calculated: Overall Boss %.1f%% (%.1fs), Trash %.1f%% (%.1fs), Total %.1fs",
+    overallBossWeight * 100, totalBossTime, overallTrashWeight * 100, totalTrashTime, totalTime))
 
   return {
-    bossWeight = bossWeight,
-    trashWeight = trashWeight,
+    bossWeight = overallBossWeight,
+    trashWeight = overallTrashWeight,
     totalBossTime = totalBossTime,
-    totalTrashTime = totalTrashTime
+    totalTrashTime = totalTrashTime,
+    perBossData = bossData,
+    hasBossData = #bossData > 0
   }
+end
+
+---Calculate boss count impact with dynamic per-boss weighting
+---@param bossDelta number Overall boss count delta (ahead/behind)
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@param weights table Dynamic weight data with per-boss information
+---@return number bossCountImpact Weighted boss count impact
+function Calculator:CalculateDynamicBossCountImpact(bossDelta, currentRun, bestTime, elapsedTime, weights)
+  if not weights.hasBossData or bossDelta == 0 then
+    -- Fallback to simple calculation if no boss data available
+    return bossDelta * 25 -- Each boss ahead/behind = 25% impact
+  end
+
+  local perBossData = weights.perBossData
+  local currentBossCount = #currentRun.bossKillTimes
+  local bestBossKillTimes = bestTime.bossKillTimes or {}
+
+  -- Calculate weighted impact based on which specific bosses are ahead/behind
+  local weightedImpact = 0
+
+  if bossDelta > 0 then
+    -- Ahead on bosses - calculate impact of being ahead on specific bosses
+    for i = 1, currentBossCount do
+      local bossData = perBossData[i]
+      if bossData then
+        -- Being ahead on a harder boss (longer fight time) has more impact
+        local bossImpact = 50 * bossData.difficultyRating * bossData.categoryWeight
+        weightedImpact = weightedImpact + bossImpact
+
+        PushMaster:DebugPrint(string.format(
+          "Ahead on %s: difficulty %.1f, weight %.3f, impact %.1f",
+          bossData.name, bossData.difficultyRating, bossData.categoryWeight, bossImpact))
+      end
+    end
+  elseif bossDelta < 0 then
+    -- Behind on bosses - calculate impact of missing specific upcoming bosses
+    local nextBossIndex = currentBossCount + 1
+    local bossesStillNeeded = math.abs(bossDelta)
+
+    for i = nextBossIndex, math.min(nextBossIndex + bossesStillNeeded - 1, #perBossData) do
+      local bossData = perBossData[i]
+      if bossData then
+        -- Being behind on a harder boss has more negative impact
+        local bossImpact = -50 * bossData.difficultyRating * bossData.categoryWeight
+        weightedImpact = weightedImpact + bossImpact
+
+        PushMaster:DebugPrint(string.format(
+          "Behind on upcoming %s: difficulty %.1f, weight %.3f, impact %.1f",
+          bossData.name, bossData.difficultyRating, bossData.categoryWeight, bossImpact))
+      end
+    end
+  end
+
+  -- Cap the impact to reasonable bounds
+  weightedImpact = math.max(-100, math.min(100, weightedImpact))
+
+  PushMaster:DebugPrint(string.format(
+    "Dynamic boss count impact: %d boss delta -> %.1f weighted impact",
+    bossDelta, weightedImpact))
+
+  return weightedImpact
 end
 
 ---Calculate overall efficiency combining trash, boss timing, and boss count with dynamic weights
@@ -679,10 +766,10 @@ function Calculator:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun
   -- Calculate dynamic weights based on actual time spent in this dungeon
   local weights = self:CalculateDungeonWeights(bestTime)
 
-  -- Use dynamic weights instead of arbitrary ones
-  local trashWeight = weights.trashWeight * 0.8     -- 80% of trash time weight for milestone progress
-  local bossTimingWeight = weights.bossWeight * 0.8 -- 80% of boss time weight for timing efficiency
-  local bossCountWeight = 0.2                       -- 20% fixed for boss count ahead/behind
+  -- Use fully dynamic weighting system
+  local trashWeight = weights.trashWeight * 0.7     -- 70% of trash time weight for milestone progress
+  local bossTimingWeight = weights.bossWeight * 0.5 -- 50% of boss time weight for timing efficiency
+  local bossCountWeight = weights.bossWeight * 0.5  -- 50% of boss time weight for count ahead/behind
 
   -- Calculate weighted efficiency
   local efficiency = 0
@@ -693,15 +780,15 @@ function Calculator:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun
   -- Boss timing component (actual kill speed vs best run, weighted by actual boss time)
   efficiency = efficiency + (bossTimingEfficiency * bossTimingWeight)
 
-  -- Boss count component (ahead/behind on boss kills, fixed weight)
-  local bossCountImpact = bossDelta * 25 -- Each boss ahead/behind = 25% impact
+  -- Boss count component (ahead/behind on boss kills, dynamically weighted per boss)
+  local bossCountImpact = self:CalculateDynamicBossCountImpact(bossDelta, currentRun, bestTime, elapsedTime, weights)
   efficiency = efficiency + (bossCountImpact * bossCountWeight)
 
-  -- Apply death penalty impact
+  -- Apply death penalty impact (reserve 30% for death penalty and learning factors)
   local deathPenalty = currentRun.progress.deaths * 15 -- 15 seconds per death
   local deathImpact = 0
   if bestTime.time > 0 then
-    deathImpact = -(deathPenalty / bestTime.time) * 100
+    deathImpact = -(deathPenalty / bestTime.time) * 100 * 0.3 -- 30% weight for death impact
     efficiency = efficiency + deathImpact
   end
 
@@ -712,7 +799,7 @@ function Calculator:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun
   efficiency = math.max(-100, math.min(100, efficiency))
 
   PushMaster:DebugPrint(string.format(
-    "Dynamic Efficiency Breakdown: Trash %.1f%% (%.1f × %.1f), Boss Timing %.1f%% (%.1f × %.1f), Boss Count %.1f%% (%.1f × %.1f), Deaths %.1f%%, Final %.1f%%",
+    "Fully Dynamic Efficiency: Trash %.1f%% (%.1f × %.1f), Boss Timing %.1f%% (%.1f × %.1f), Boss Count %.1f%% (%.1f × %.1f), Deaths %.1f%%, Final %.1f%%",
     trashDelta * trashWeight, trashDelta, trashWeight,
     bossTimingEfficiency * bossTimingWeight, bossTimingEfficiency, bossTimingWeight,
     bossCountImpact * bossCountWeight, bossCountImpact, bossCountWeight,
