@@ -1,0 +1,20 @@
+package-as: PushMaster
+manual-changelog: docs/CHANGELOG.md
+enable-nolib-creation: no
+
+ignore:
+  - .git
+  - .vscode
+  - .gitignore
+  - .gitattributes
+  - docs/
+  - Reference AddOns/
+  - __pycache__/
+  - *.py
+  - *.pyc
+  - *.pyo
+  - *.tmp
+  - *.log
+  - *.bak
+
+license-output: LICENSE.txt 
