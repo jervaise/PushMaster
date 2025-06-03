@@ -26,6 +26,7 @@ Core\Init.lua
 # Data modules
 Data\DungeonData.lua
 Data\Calculator.lua
+Data\BaselineBestTimes.lua
 Data\EventHandlers.lua
 
 # UI modules

@@ -238,6 +238,10 @@ function PushMaster:InitializeModules()
       self.Data.Calculator:Initialize()
       self:DebugPrint("Calculator module initialized")
     end
+    if self.Data.BaselineBestTimes then
+      self.Data.BaselineBestTimes:Initialize()
+      self:DebugPrint("BaselineBestTimes module initialized")
+    end
     if self.Data.EventHandlers then
       self.Data.EventHandlers:Initialize()
       self:DebugPrint("EventHandlers module initialized")
