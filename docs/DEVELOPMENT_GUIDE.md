@@ -1,34 +1,33 @@
 # PushMaster Development Guide
 
-**Version**: Dynamic (from TOC)  
-**Last Updated**: December 2024  
+**Version**: Dynamic (from TOC)
 **Target WoW Version**: 11.1.5+ (The War Within Season 2)
 
 ## Overview
 
-PushMaster is a simplified yet intelligent Mythic+ performance tracker designed for **The War Within Season 2**. This guide covers the technical architecture, development patterns, and design philosophy behind the addon.
+PushMaster is a Mythic+ performance tracker for **The War Within Season 2**. This guide explains its technical setup, development practices, and design.
 
 ## 🎯 Design Philosophy
 
 ### **Centralized Metadata**
-- **Single Source of Truth**: All version and author information stored in `PushMaster.toc`
-- **Dynamic References**: Code uses `GetAddOnMetadata()` to access TOC data
-- **No Duplication**: Eliminates maintenance issues from multiple version definitions
+- All version and author info is in `PushMaster.toc`.
+- Code uses `GetAddOnMetadata()` to get TOC data.
+- This avoids issues from multiple version definitions.
 
 ### **Intelligent Simplicity**
-- **One-line display** with maximum information density
-- **Smart activation** - only for keys +12 and above where analysis matters
-- **Dynamic intelligence** - learns from actual player data instead of assumptions
+- Shows lots of info on one line.
+- Activates only for keys +12 and up.
+- Learns from player data, not assumptions.
 
-### **Data-Driven Approach (v0.0.2)**
-- **Dynamic Weight Calculation** - Boss vs trash importance calculated from real run data
-- **Milestone-based Analysis** - Uses actual progress points instead of linear assumptions
-- **Dungeon-specific Intelligence** - Each dungeon gets realistic weights based on player performance
+### **Data-Driven Approach**
+- Boss vs. trash importance is calculated from real run data.
+- Uses actual progress points, not linear guesses.
+- Each dungeon gets realistic weights based on player performance.
 
 ### **Performance Focus**
-- Minimal UI overhead
-- Efficient calculation algorithms
-- Smart caching and data management
+- Minimal UI impact.
+- Efficient calculations.
+- Smart caching and data handling.
 
 ## 🏗️ Architecture Overview
 
@@ -44,7 +43,7 @@ PushMaster/
 │   └── Init.lua             # Initialization and startup
 ├── Data/                    # Data processing and analysis
 │   ├── DungeonData.lua      # Dungeon definitions and metadata
-│   ├── Calculator.lua       # Core calculation engine (NEW: Dynamic weights)
+│   ├── Calculator.lua       # Core calculation engine (with dynamic weights)
 │   └── EventHandlers.lua    # WoW event processing
 └── UI/                      # User interface components
     ├── MainFrame.lua        # Primary display frame
@@ -52,14 +51,14 @@ PushMaster/
     ├── SettingsFrame.lua    # Settings UI
     ├── Themes.lua           # Visual themes and styling
     ├── MinimapButton.lua    # Minimap integration
-    └── TestMode.lua         # Development testing (ENHANCED in v0.0.2)
+    └── TestMode.lua         # Development testing
 ```
 
-## 🧮 Core Calculation Engine (v0.0.2)
+## 🧮 Core Calculation Engine
 
 ### **Dynamic Weight Calculation**
 
-The heart of PushMaster's intelligence is the dynamic weight system that calculates realistic importance of bosses vs trash based on actual run data:
+PushMaster's core is its dynamic weight system. It calculates the importance of bosses versus trash using actual run data:
 
 ```lua
 -- Example: Necrotic Wake +15 Analysis
@@ -89,7 +88,7 @@ end
 
 ### **Milestone-Based Analysis**
 
-Instead of linear assumptions, PushMaster uses actual progress milestones:
+PushMaster uses actual progress milestones instead of assuming linear progress:
 
 ```lua
 -- Real milestone data from best runs
@@ -128,11 +127,11 @@ local function CalculateBossTimingEfficiency(currentRun, bestRun)
 end
 ```
 
-## 🧪 Enhanced Test Mode (v0.0.2)
+## 🧪 Enhanced Test Mode
 
 ### **5x Speed Testing**
 
-The test mode now runs at 5x speed for rapid validation:
+Test mode runs at 5x speed for faster validation:
 
 ```lua
 local function testLoop()
@@ -153,7 +152,7 @@ end
 
 ### **Real Calculator Integration**
 
-Test mode now uses actual calculation logic instead of simulated data:
+Test mode uses the actual calculation logic:
 
 ```lua
 -- Start test with real Calculator integration
@@ -179,7 +178,7 @@ end
 
 ### **Dynamic Weight Validation**
 
-Test scenarios validate the dynamic weight calculation:
+Test scenarios check the dynamic weight calculation:
 
 ```lua
 -- Test scenario with realistic pace changes
@@ -198,204 +197,41 @@ SAMPLE_RUN_DATA = {
                 { progress = 67.2, time = 1020 },  -- Recovery
                 { progress = 89.4, time = 1380 },  -- Strong finish
                 { progress = 100, time = 1620 }    -- Completion
-            },
-            bosses = {
-                { name = "Blightbone", killTime = 420 },
-                { name = "Amarth", killTime = 780 },
-                { name = "Surgeon Stitchflesh", killTime = 1140 },
-                { name = "Nalthor the Rimebinder", killTime = 1560 }
             }
         }
     }
+    -- ... more test scenarios ...
 }
 ```
 
-## 📊 Data Flow
+## ⚙️ WoW API and Events
 
-### **1. Event Detection**
-```lua
--- Challenge mode start detection
-CHALLENGE_MODE_START -> EventHandlers:OnChallengeStart()
-```
+PushMaster interacts with the WoW API for:
+- Addon metadata (`GetAddOnMetadata`)
+- Dungeon information (`C_ChallengeMode.GetMapUIInfo`)
+- Player events (combat log, instance changes)
 
-### **2. Data Collection**
-```lua
--- Progress tracking
-SCENARIO_CRITERIA_UPDATE -> Calculator:UpdateProgress()
-COMBAT_LOG_EVENT -> Calculator:ProcessCombatEvent()
-```
+## 📚 Libraries and Dependencies
 
-### **3. Dynamic Analysis**
-```lua
--- Real-time calculation with dynamic weights
-Calculator:CalculateOverallEfficiency() -> {
-    weights = CalculateDungeonWeights(bestRunData),
-    trashProgress = CalculateTrashProgress(),
-    bossEfficiency = CalculateBossTimingEfficiency(),
-    deathImpact = CalculateDeathImpact()
-}
-```
+- No external libraries are used to keep it lightweight.
 
-### **4. UI Update**
-```lua
--- Display update with intelligent formatting
-MainFrame:UpdateDisplay(comparisonData)
-```
+## 🤝 Contributing
 
-## 🔧 Development Patterns
+1.  **Fork the repository.**
+2.  **Create a feature branch:** `git checkout -b feature/your-feature-name`
+3.  **Commit your changes:** `git commit -m 'Add some feature'`
+    - Follow conventional commit messages (e.g., `feat:`, `fix:`, `docs:`)
+4.  **Push to the branch:** `git push origin feature/your-feature-name`
+5.  **Open a pull request.**
 
-### **Centralized Metadata Access**
+### **Code Style**
+- Use the existing code style (Lua, 4-space indentation).
+- Comment complex logic.
 
-All addon metadata is stored in the TOC file and accessed dynamically:
+### **Testing**
+- Utilize the in-game Test Mode for changes to the calculation engine.
+- Test thoroughly in various Mythic+ scenarios.
 
-```lua
--- ✅ CORRECT: Access metadata from TOC file
-local version = GetAddOnMetadata(addonName, "Version")
-local author = GetAddOnMetadata(addonName, "Author")
-local title = GetAddOnMetadata(addonName, "Title")
-local notes = GetAddOnMetadata(addonName, "Notes")
+## 📜 License
 
--- ✅ CORRECT: Use centralized constants
-local Constants = PushMaster.Core.Constants
-local version = Constants.ADDON_VERSION  -- Gets from TOC
-local author = Constants.ADDON_AUTHOR    -- Gets from TOC
-
--- ✅ CORRECT: Use main addon references
-local version = PushMaster.version  -- Set from TOC in PushMaster.lua
-local author = PushMaster.author    -- Set from TOC in PushMaster.lua
-
--- ❌ WRONG: Hardcoded values
-local version = "0.0.2"  -- Don't do this!
-local author = "Jervaise"  -- Don't do this!
-```
-
-### **TOC File as Single Source of Truth**
-
-The `PushMaster.toc` file contains all metadata:
-
-```toc
-## Interface: 110002
-## Title: PushMaster
-## Notes: Mythic+ Keystone Performance Tracker
-## Author: Jervaise
-## Version: 0.0.2
-## SavedVariables: PushMasterDB
-```
-
-**To update version/author:**
-1. ✅ **Only edit `PushMaster.toc`**
-2. ✅ **All code automatically uses new values**
-3. ❌ **Never edit version in code files**
-
-### **Module Structure**
-Each module follows a consistent pattern:
-```lua
-local ModuleName = {}
-PushMaster.ModuleName = ModuleName
-
--- Private variables
-local privateVar = {}
-
--- Public interface
-function ModuleName:PublicMethod()
-    -- Implementation
-end
-
--- Initialization
-function ModuleName:Initialize()
-    -- Setup code
-end
-```
-
-### **Error Handling**
-```lua
--- Defensive programming with graceful degradation
-local function safeCalculation()
-    if not self.bestRunData or not self.currentRun then
-        return self:GetDefaultComparison()
-    end
-    
-    local success, result = pcall(function()
-        return self:CalculateComplexMetric()
-    end)
-    
-    if success then
-        return result
-    else
-        PushMaster:Debug("Calculation failed: " .. tostring(result))
-        return self:GetFallbackComparison()
-    end
-end
-```
-
-### **Performance Optimization**
-```lua
--- Efficient caching and lazy evaluation
-local calculationCache = {}
-local lastCacheTime = 0
-
-function Calculator:GetCachedComparison()
-    local currentTime = GetTime()
-    if currentTime - lastCacheTime < 0.5 then  -- 500ms cache
-        return calculationCache
-    end
-    
-    calculationCache = self:CalculateComparison()
-    lastCacheTime = currentTime
-    return calculationCache
-end
-```
-
-## 🧪 Testing Strategy
-
-### **Unit Testing with Test Mode**
-```lua
--- Start comprehensive test
-PushMaster.UI.TestMode:StartTest(1)  -- Necrotic Wake validation
-
--- Watch for dynamic weight calculations
--- Expected output:
--- "Dynamic weights calculated: Trash=59.6%, Boss=20.4%, Count=20%"
--- "Progress efficiency: +8.5% (ahead of best pace)"
-
--- Stop test
-PushMaster.UI.TestMode:StopTest()
-```
-
-### **Real-World Validation**
-1. **Run actual keys +12 and above**
-2. **Compare predictions vs reality**
-3. **Validate weight calculations**
-4. **Test edge cases (deaths, route changes)**
-
-## 🔮 Future Development
-
-### **Planned Enhancements**
-- **Multi-run learning** for improved accuracy
-- **Route detection** for strategy-specific analysis
-- **Group composition factors** for specialized calculations
-- **Confidence intervals** for prediction reliability
-
-### **Technical Debt**
-- Refactor event handling for better performance
-- Implement more sophisticated caching strategies
-- Add comprehensive error recovery mechanisms
-- Optimize memory usage for long sessions
-
-## 📝 Version History
-
-### **v0.0.2** (Current)
-- ✅ **Dynamic Weight Calculation** - Boss vs trash importance from real data
-- ✅ **Enhanced Test Mode** - 5x speed testing with real Calculator integration
-- ✅ **Improved Calculation Logic** - Milestone-based analysis with dungeon-specific weights
-- ✅ **Better Debug Output** - Comprehensive validation and development tools
-
-### **v0.0.1** (Previous)
-- ✅ Basic milestone-based analysis
-- ✅ Simple boss timing comparison
-- ✅ Fixed weight system
-- ✅ Basic test mode
-
----
-
-**PushMaster Development**: Building intelligent simplicity for serious key pushers. 
+This project is licensed under the [MIT License](LICENSE). 

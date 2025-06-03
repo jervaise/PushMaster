@@ -27,7 +27,7 @@ local originalDebugMode = false -- Store original debug mode state
 -- Sample run data for testing with realistic pace variations
 local SAMPLE_RUN_DATA = {
   {
-    name = "Priory of the Sacred Flame +15 (Competitive Test)",
+    name = "Priory of the Sacred Flame",
     mapID = 2649,
     keyLevel = 15,
     timeLimit = 1800,            -- 30 minutes
@@ -40,17 +40,17 @@ local SAMPLE_RUN_DATA = {
         { name = "Baron Braunpyke",   killTime = 720,  bossNumber = 2 }, -- 12:00 - FAST
         { name = "Prioress Murrpray", killTime = 1440, bossNumber = 3 }  -- 24:00 - FAST
       },
-      trashMilestones = {
-        [10] = 150,  -- 10% at 2:30 - VERY FAST
-        [20] = 300,  -- 20% at 5:00 - FAST
-        [30] = 450,  -- 30% at 7:30 - FAST
-        [40] = 600,  -- 40% at 10:00 - FAST
-        [50] = 780,  -- 50% at 13:00 - FAST
-        [60] = 960,  -- 60% at 16:00 - FAST
-        [70] = 1140, -- 70% at 19:00 - FAST
-        [80] = 1320, -- 80% at 22:00 - FAST
-        [90] = 1440, -- 90% at 24:00 - FAST
-        [100] = 1500 -- 100% at 25:00 - FAST
+      trashSamples = {
+        { time = 150,  trash = 10 },
+        { time = 300,  trash = 20 },
+        { time = 450,  trash = 30 },
+        { time = 600,  trash = 40 },
+        { time = 780,  trash = 50 },
+        { time = 960,  trash = 60 },
+        { time = 1140, trash = 70 },
+        { time = 1320, trash = 80 },
+        { time = 1440, trash = 90 },
+        { time = 1500, trash = 100 }
       }
     },
     testProgression = {
@@ -81,7 +81,7 @@ local SAMPLE_RUN_DATA = {
     }
   },
   {
-    name = "Theater of Pain +12 (Best Run Wins)",
+    name = "Theater of Pain",
     mapID = 2293,
     keyLevel = 12,
     timeLimit = 1800,            -- 30 minutes
@@ -95,17 +95,17 @@ local SAMPLE_RUN_DATA = {
         { name = "Xav the Unfallen",          killTime = 1080, bossNumber = 3 }, -- 18:00 - FAST
         { name = "Kul'tharok",                killTime = 1320, bossNumber = 4 }  -- 22:00 - FAST
       },
-      trashMilestones = {
-        [10] = 120,  -- 10% at 2:00 - VERY FAST
-        [20] = 300,  -- 20% at 5:00 - FAST
-        [30] = 480,  -- 30% at 8:00 - FAST
-        [40] = 660,  -- 40% at 11:00 - FAST
-        [50] = 840,  -- 50% at 14:00 - FAST
-        [60] = 1020, -- 60% at 17:00 - FAST
-        [70] = 1200, -- 70% at 20:00 - FAST
-        [80] = 1320, -- 80% at 22:00 - FAST
-        [90] = 1380, -- 90% at 23:00 - FAST
-        [100] = 1440 -- 100% at 24:00 - FAST
+      trashSamples = {
+        { time = 120,  trash = 10 },
+        { time = 300,  trash = 20 },
+        { time = 480,  trash = 30 },
+        { time = 660,  trash = 40 },
+        { time = 840,  trash = 50 },
+        { time = 1020, trash = 60 },
+        { time = 1200, trash = 70 },
+        { time = 1320, trash = 80 },
+        { time = 1380, trash = 90 },
+        { time = 1440, trash = 100 }
       }
     },
     testProgression = {
@@ -133,7 +133,7 @@ local SAMPLE_RUN_DATA = {
     }
   },
   {
-    name = "Operation Mechagon: Workshop +14 (Current Run Dominates)",
+    name = "Operation Mechagon: Workshop",
     mapID = 2097,
     keyLevel = 14,
     timeLimit = 1800,            -- 30 minutes
@@ -147,17 +147,17 @@ local SAMPLE_RUN_DATA = {
         { name = "Machinist's Garden",    killTime = 1320, bossNumber = 3 }, -- 22:00 - SLOW
         { name = "King Mechagon",         killTime = 1620, bossNumber = 4 }  -- 27:00 - SLOW
       },
-      trashMilestones = {
-        [10] = 300,  -- 10% at 5:00 - SLOW
-        [20] = 540,  -- 20% at 9:00 - SLOW
-        [30] = 780,  -- 30% at 13:00 - SLOW
-        [40] = 960,  -- 40% at 16:00 - SLOW
-        [50] = 1140, -- 50% at 19:00 - SLOW
-        [60] = 1320, -- 60% at 22:00 - SLOW
-        [70] = 1440, -- 70% at 24:00 - SLOW
-        [80] = 1560, -- 80% at 26:00 - SLOW
-        [90] = 1620, -- 90% at 27:00 - SLOW
-        [100] = 1680 -- 100% at 28:00 - SLOW
+      trashSamples = {
+        { time = 300,  trash = 10 },
+        { time = 540,  trash = 20 },
+        { time = 780,  trash = 30 },
+        { time = 960,  trash = 40 },
+        { time = 1140, trash = 50 },
+        { time = 1320, trash = 60 },
+        { time = 1440, trash = 70 },
+        { time = 1560, trash = 80 },
+        { time = 1620, trash = 90 },
+        { time = 1680, trash = 100 }
       }
     },
     testProgression = {
@@ -221,20 +221,18 @@ function TestMode:setupFakeBestTime()
   -- Access the bestTimes storage directly (we need to inject fake data)
   -- Since bestTimes is local in Calculator, we'll use the import function
   local fakeBestTimes = {}
+  fakeBestTimes[testRunData.mapID] = {}
 
-  -- Create fake best time entry for this dungeon/key level
-  if not fakeBestTimes[testRunData.mapID] then
-    fakeBestTimes[testRunData.mapID] = {}
-  end
-
-  fakeBestTimes[testRunData.mapID][testRunData.keyLevel] = {
+  -- Build fake best-time entry directly using new trashSamples
+  local fakeEntry = {
     time = testRunData.bestRunData.time,
     date = date("%Y-%m-%d %H:%M:%S"),
     deaths = testRunData.bestRunData.deaths,
     affixes = testRunData.affixes,
     bossKillTimes = testRunData.bestRunData.bossKillTimes,
-    trashMilestones = testRunData.bestRunData.trashMilestones
+    trashSamples = testRunData.bestRunData.trashSamples or {}
   }
+  fakeBestTimes[testRunData.mapID][testRunData.keyLevel] = fakeEntry
 
   -- Import the fake best times into Calculator
   Calculator:ImportBestTimes(fakeBestTimes)

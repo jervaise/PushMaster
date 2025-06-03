@@ -2,7 +2,7 @@
 ## Title: PushMaster
 ## Notes: Mythic+ Keystone Performance Tracker
 ## Author: Jervaise
-## Version: 0.0.2
+## Version: 0.9.0
 ## IconTexture: Interface\AddOns\PushMaster\Media\flash
 ## SavedVariables: PushMasterDB
 ## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0, CallbackHandler-1.0

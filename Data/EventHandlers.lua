@@ -299,12 +299,8 @@ local function onScenarioCriteriaUpdate(...)
 
   local currentTrash = (criteriaInfo.quantity / criteriaInfo.totalQuantity) * 100
 
-  -- Check if we've crossed a milestone boundary (every 5% for more granular tracking)
-  local oldMilestone = math.floor(lastTrashPercent / 5) * 5
-  local newMilestone = math.floor(currentTrash / 5) * 5
-
-  -- Always update if we've crossed a milestone boundary, or if it's been a significant change
-  local shouldUpdate = (newMilestone > oldMilestone) or (math.abs(currentTrash - lastTrashPercent) >= 1.0)
+  -- Always update if the trash percentage has changed, respecting the throttle.
+  local shouldUpdate = (currentTrash ~= lastTrashPercent)
 
   if not shouldUpdate then
     return
@@ -398,6 +394,20 @@ local function onCombatLogEventUnfiltered(...)
   end
 end
 
+---Handle Blizzard's ScenarioObjectiveTracker UpdateTime
+---@param self table The ScenarioObjectiveTracker.ChallengeModeBlock itself
+---@param elapsedTime number The elapsed time from Blizzard's timer
+local function onBlizzardTimerUpdate(self, elapsedTime)
+  -- Check if PushMaster and its modules are loaded and active
+  if not PushMaster or not PushMaster.Data or not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+    return
+  end
+
+  -- Pass the authoritative elapsed time to the Calculator's UpdateProgress
+  -- We only pass elapsedTime here. Trash and other progress will be updated by their respective events.
+  PushMaster.Data.Calculator:UpdateProgress({ elapsedTime = elapsedTime })
+end
+
 ---Initialize the event handling system
 function EventHandlers:Initialize()
   PushMaster:DebugPrint("EventHandlers module initialized")
@@ -413,6 +423,14 @@ function EventHandlers:Initialize()
   -- Register boss encounter events
   self:RegisterEvent("ENCOUNTER_START", onEncounterStart)
   self:RegisterEvent("ENCOUNTER_END", onEncounterEnd)
+
+  -- Hook Blizzard's M+ timer update
+  if ScenarioObjectiveTracker and ScenarioObjectiveTracker.ChallengeModeBlock and ScenarioObjectiveTracker.ChallengeModeBlock.UpdateTime then
+    hooksecurefunc(ScenarioObjectiveTracker.ChallengeModeBlock, "UpdateTime", onBlizzardTimerUpdate)
+    PushMaster:DebugPrint("Hooked ScenarioObjectiveTracker.ChallengeModeBlock.UpdateTime")
+  else
+    PushMaster:Print("Error: Could not hook Blizzard M+ Timer. Timer accuracy may be affected.")
+  end
 end
 
 ---Start tracking events

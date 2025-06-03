@@ -132,6 +132,11 @@ local function createSettingsFrame()
   -- Register with UI special frames to enable Escape key closing
   tinsert(UISpecialFrames, "PushMasterSettingsFrame")
 
+  -- Ensure ESC and other hides trigger our custom hide logic
+  frame:HookScript("OnHide", function(self)
+    SettingsFrame:Hide()
+  end)
+
   -- Add backdrop (matching DotMaster style)
   frame:SetBackdrop({
     bgFile = "Interface/Tooltips/UI-Tooltip-Background",

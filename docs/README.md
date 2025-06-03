@@ -1,7 +1,7 @@
 # PushMaster - Intelligent Mythic+ Performance Tracker
 
-**Version**: Dynamic (from TOC)  
-**Author**: Jervaise (from TOC)  
+**Version**: 0.9.0  
+**Author**: Jervaise  
 **WoW Version**: 11.1.5+ (The War Within Season 2)
 
 A simplified yet intelligent addon for tracking Mythic+ dungeon performance in **The War Within Season 2** (11.1.5+). PushMaster provides precise, actionable feedback without overwhelming users with information.
@@ -12,6 +12,7 @@ A simplified yet intelligent addon for tracking Mythic+ dungeon performance in *
 - **One-line display** with essential metrics only
 - **Smart activation** - only shows for keys +12 and above
 - **Clean interface** - no clutter, just what you need
+- **Streamlined commands** - single `/pm` command for easy access
 
 ### 🧠 **Intelligent Analysis**
 - **Dynamic Weight Calculation** - Automatically calculates boss vs trash importance based on YOUR best run data
@@ -25,6 +26,11 @@ A simplified yet intelligent addon for tracking Mythic+ dungeon performance in *
 - **👹 Boss Progress**: Precise boss timing difference
 - **💀 Death Impact**: Clear death penalty tracking
 
+### 🖱️ **Easy Access**
+- **Minimap Button**: Left-click to open settings
+- **Slash Command**: Type `/pm` to toggle settings window
+- **Auto-positioning**: Drag displays to move them
+
 ## 🎮 Why Keys +12 and Above?
 
 In **The War Within Season 2**, affixes no longer rotate at higher key levels, making performance more predictable and meaningful for comparison. PushMaster focuses on this range where:
@@ -34,7 +40,7 @@ In **The War Within Season 2**, affixes no longer rotate at higher key levels, m
 
 ## 🔧 How It Works
 
-### **Dynamic Weight Calculation (New in v0.0.2)**
+### **Dynamic Weight Calculation**
 PushMaster analyzes your best run data to calculate how much time is actually spent on bosses vs trash in each specific dungeon:
 
 ```
@@ -73,11 +79,17 @@ This means:
 ## ⚙️ Configuration
 
 PushMaster works automatically with minimal configuration needed:
+- **Settings Access**: Click minimap button or type `/pm`
 - **Auto-positioning**: Drag the display to move it
 - **Smart tooltips**: Hover for detailed information
 - **Automatic learning**: Improves accuracy with each run
 
-## 🔬 Technical Improvements (v0.0.2)
+## 🔬 Technical Improvements (v0.9.0)
+
+### **Streamlined Interface**
+- **Single Command**: `/pm` command replaces multiple slash commands
+- **Unified Access**: Both minimap and command open the same settings window
+- **Clean Design**: Removed unnecessary commands and complexity
 
 ### **Dynamic Weight System**
 - Calculates actual time spent on bosses vs trash from best run data
@@ -116,6 +128,10 @@ Test scenarios include:
 - **Recovery phases** with improved performance
 - **Strong finishes** with fast boss kills
 
+## 💻 Commands
+
+- **`/pm`** - Toggle settings window
+
 ## 🔮 Future Enhancements
 
 - **Multi-run learning** for improved predictions
@@ -132,8 +148,8 @@ Test scenarios include:
 ## 📞 Support
 
 For issues, suggestions, or contributions:
-- **Author**: Jervaise (defined in PushMaster.toc)
-- **Version**: Dynamic (from PushMaster.toc)
+- **Author**: Jervaise
+- **Version**: 0.9.0
 - **Focus**: Simplified intelligence for serious key pushers
 
 ---

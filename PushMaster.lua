@@ -58,7 +58,7 @@ local function onAddonLoaded(loadedAddonName)
   -- Initialize saved variables (use placeholder version for now)
   if not PushMasterDB then
     PushMasterDB = {
-      version = "0.0.2", -- Use hardcoded version for initial setup
+      version = "0.9.0", -- Use hardcoded version for initial setup
       bestTimes = {},
       settings = {
         debugMode = false,
@@ -106,12 +106,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.0.2"
+      PushMaster.version = "0.9.0"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.0.2"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.0"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC
@@ -164,8 +164,6 @@ local function onPlayerLogin()
       end
     end
   end
-
-  PushMaster:Print("PushMaster v" .. PushMaster.version .. " loaded successfully")
 end
 
 ---Handle PLAYER_LOGOUT event
@@ -303,52 +301,16 @@ end
 _G.PushMaster = PushMaster
 
 -- Register slash commands
-SLASH_PUSHMASTER1 = "/pushmaster"
-SLASH_PUSHMASTER2 = "/pm"
+SLASH_PUSHMASTER1 = "/pm"
 
 SlashCmdList["PUSHMASTER"] = function(msg)
-  local command = string.lower(msg or "")
-
-  if command == "debug" then
-    debugMode = not debugMode
-    PushMaster:Print("Debug mode " .. (debugMode and "enabled" or "disabled"))
-  elseif command == "test" then
-    if PushMaster.UI and PushMaster.UI.TestMode then
-      PushMaster.UI.TestMode:StartTest()
+  -- Toggle settings frame on /pm (same as minimap left-click)
+  if PushMaster.UI and PushMaster.UI.SettingsFrame then
+    local settings = PushMaster.UI.SettingsFrame
+    if settings:IsShown() then
+      settings:Hide()
     else
-      PushMaster:Print("Test mode not available")
+      settings:Show()
     end
-  elseif command == "check" then
-    -- Manual dungeon detection check
-    if PushMaster.Data and PushMaster.Data.EventHandlers then
-      local instanceData = PushMaster.Data.EventHandlers:GetCurrentInstanceData()
-      if instanceData then
-        print("PushMaster: Detected " .. tostring(instanceData.zoneName) .. " +" .. tostring(instanceData.cmLevel))
-        print("PushMaster: Map ID " .. tostring(instanceData.currentMapID))
-      else
-        print("PushMaster: No dungeon detected or not in Mythic+")
-      end
-    end
-  elseif command == "config" or command == "settings" then
-    if PushMaster.UI and PushMaster.UI.SettingsFrame then
-      PushMaster.UI.SettingsFrame:Toggle()
-    else
-      PushMaster:Print("Settings not available")
-    end
-  elseif command == "reset" then
-    PushMaster:Print("Use '/pm reset confirm' to reset all data")
-  elseif command == "reset confirm" then
-    if PushMaster.Core and PushMaster.Core.Database then
-      PushMaster.Core.Database:ResetAllData(true)
-    else
-      PushMaster:Print("Database reset not available")
-    end
-  else
-    PushMaster:Print("PushMaster v" .. PushMaster.version .. " - Available commands:")
-    PushMaster:Print("/pm debug - Toggle debug mode")
-    PushMaster:Print("/pm test - Start test mode")
-    PushMaster:Print("/pm check - Check current dungeon detection")
-    PushMaster:Print("/pm config - Open settings")
-    PushMaster:Print("/pm reset confirm - Reset all data")
   end
 end

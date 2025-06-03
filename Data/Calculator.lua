@@ -34,7 +34,10 @@ local currentRun = {
   deathTimes = {},
   playerLastDeathTimestamp = {}, -- NEW: Track last death timestamp per player GUID
   bossKillTimes = {},            -- NEW: Record exact boss kill times
-  progressHistory = {}
+  trashSamples = {},             -- NEW: Record trash progression samples
+  progressHistory = {},
+  loggedDeaths = {},
+  loggedDeathsByGUID = {}
 }
 
 -- Best times storage (will be loaded from saved variables)
@@ -62,7 +65,7 @@ function Calculator:StartNewRun(instanceData)
   currentRun = {
     isActive = true,
     instanceData = instanceData,
-    startTime = GetTime(),
+    startTime = GetTime(), -- Retain for historical/reference if needed, but not for primary elapsedTime calc
     completionTime = nil,
     progress = {
       trash = 0,
@@ -73,8 +76,10 @@ function Calculator:StartNewRun(instanceData)
     deathTimes = {},
     playerLastDeathTimestamp = {}, -- Reset this too
     bossKillTimes = {},            -- NEW: Record exact boss kill times
-    trashMilestones = {},          -- NEW: Record trash progression milestones
-    progressHistory = {}
+    trashSamples = {},             -- NEW: Record trash progression samples
+    progressHistory = {},
+    loggedDeaths = {},
+    loggedDeathsByGUID = {}
   }
 
   PushMaster:DebugPrint("Started new run: " .. instanceData.zoneName .. " +" .. instanceData.cmLevel)
@@ -93,101 +98,114 @@ function Calculator:UpdateProgress(progressData)
     return
   end
 
-  -- Use provided elapsed time if available (for test mode), otherwise calculate from real time
-  local elapsedTime
-  if progressData.elapsedTime then
-    elapsedTime = progressData.elapsedTime
+  local authoritativeElapsedTime
+  if progressData.elapsedTime ~= nil then -- Check for nil explicitly
+    authoritativeElapsedTime = progressData.elapsedTime
+  elseif currentRun.startTime then        -- Fallback ONLY if hook somehow fails AND startTime exists
+    authoritativeElapsedTime = GetTime() - currentRun.startTime
+    PushMaster:DebugPrint("Warning: Using GetTime() fallback for elapsedTime in Calculator:UpdateProgress.")
   else
-    local now = GetTime()
-    elapsedTime = now - currentRun.startTime
+    PushMaster:Print("Error: elapsedTime not available in Calculator:UpdateProgress.")
+    return -- Cannot proceed without a valid time
   end
 
   -- Update current progress
   if progressData.trash then
-    local oldTrash = currentRun.progress.trash
     currentRun.progress.trash = progressData.trash
+  end
 
-    -- Record trash milestones for precise tracking (every 5% increment)
-    if not currentRun.trashMilestones then
-      currentRun.trashMilestones = {}
-    end
+  currentRun.progress.elapsedTime = authoritativeElapsedTime -- Store the authoritative time
+  -- Sample trash progress for ghost-car interpolation
+  currentRun.trashSamples = currentRun.trashSamples or {}
+  table.insert(currentRun.trashSamples, { time = authoritativeElapsedTime, trash = currentRun.progress.trash })
 
-    -- Check if we've crossed a 5% milestone
-    local oldMilestone = math.floor(oldTrash / 5) * 5
-    local newMilestone = math.floor(progressData.trash / 5) * 5
-
-    if newMilestone > oldMilestone and newMilestone <= 100 then
-      currentRun.trashMilestones[newMilestone] = elapsedTime
-      PushMaster:Print(string.format("Trash milestone: %d%% at %.1fs", newMilestone, elapsedTime))
+  -- NEW: Update death count from API
+  if C_ChallengeMode and C_ChallengeMode.GetDeathCount then
+    local apiDeathCount, apiTimeLost = C_ChallengeMode.GetDeathCount()
+    if apiDeathCount and apiDeathCount ~= currentRun.progress.deaths then
+      PushMaster:DebugPrint(string.format("API Death Count Updated: %d (was %d). Time lost: %.1fs", apiDeathCount,
+        currentRun.progress.deaths, apiTimeLost or 0))
+      currentRun.progress.deaths = apiDeathCount
+      -- currentRun.progress.timeLostToDeaths = apiTimeLost -- Optional: store this if you want to use it
     end
   end
 
-  currentRun.progress.elapsedTime = elapsedTime
-
   -- Store progress history for analysis
   table.insert(currentRun.progressHistory, {
-    time = elapsedTime,
+    time = authoritativeElapsedTime, -- Use authoritativeElapsedTime
     trash = currentRun.progress.trash,
     bosses = currentRun.progress.bosses,
     deaths = currentRun.progress.deaths
   })
 
   PushMaster:DebugPrint(string.format("Progress updated: %.1f%% trash, %.1fs elapsed",
-    currentRun.progress.trash, elapsedTime))
+    currentRun.progress.trash, authoritativeElapsedTime))
 end
 
 ---Record a death during the current run
----@param deathTime number The time when the death occurred
+---@param deathTime number The time when the death occurred (this should be a raw timestamp from combat log)
 ---@param playerGUID string The GUID of the player who died
 function Calculator:RecordDeath(deathTime, playerGUID)
   if not currentRun.isActive then
     return
   end
 
-  -- DEBOUNCE: Check if this player died very recently
-  if playerGUID and currentRun.playerLastDeathTimestamp[playerGUID] and (deathTime - currentRun.playerLastDeathTimestamp[playerGUID] < 2.0) then
-    PushMaster:Print("Debounced duplicate death event for " ..
-      playerGUID ..
-      " (event time: " ..
-      string.format("%.1f", deathTime) ..
-      ", last death time: " .. string.format("%.1f", currentRun.playerLastDeathTimestamp[playerGUID]) .. ")")
-    return -- Ignore this death event as it's too close to the last one for this player
+  -- Debounce for logging purposes, to prevent spamming the deathTimes list for the same event if it fires multiple times rapidly.
+  if playerGUID and currentRun.playerLastDeathTimestamp[playerGUID] and (deathTime - currentRun.playerLastDeathTimestamp[playerGUID] < 0.5) then -- Reduced debounce to 0.5s for logging
+    PushMaster:DebugPrint("Debounced duplicate death event for logging for " .. playerGUID)
+    return
   end
 
-  local elapsedTime = deathTime - currentRun.startTime
-  table.insert(currentRun.deathTimes, { guid = playerGUID, time = elapsedTime, timestamp = deathTime })
-  currentRun.progress.deaths = #currentRun.deathTimes
+  if not currentRun.startTime then
+    PushMaster:Print("Error: currentRun.startTime not set, cannot accurately record death time for log.")
+    return
+  end
+  local elapsedTimeAtDeath = deathTime - currentRun.startTime
 
-  -- Update last death timestamp for this player
+  -- Log the death event for detailed summary/tooltip (similar to MPT)
+  if not currentRun.loggedDeaths then currentRun.loggedDeaths = {} end
+  if not currentRun.loggedDeathsByGUID then currentRun.loggedDeathsByGUID = {} end
+
+  table.insert(currentRun.loggedDeaths, { guid = playerGUID, time = elapsedTimeAtDeath, timestamp = deathTime })
   if playerGUID then
-    currentRun.playerLastDeathTimestamp[playerGUID] = deathTime
+    currentRun.loggedDeathsByGUID[playerGUID] = (currentRun.loggedDeathsByGUID[playerGUID] or 0) + 1
+    currentRun.playerLastDeathTimestamp[playerGUID] =
+        deathTime -- Update last death timestamp for this player for logging debounce
   end
 
-  PushMaster:Print("Death recorded for " ..
+  -- The primary currentRun.progress.deaths is now updated from C_ChallengeMode.GetDeathCount() in UpdateProgress.
+  -- This function, RecordDeath, is now primarily for detailed logging of individual death events.
+
+  PushMaster:DebugPrint("Logged death for " ..
     (playerGUID or "Unknown") ..
-    " at " .. string.format("%.1f", elapsedTime) .. "s. Total deaths: " .. currentRun.progress.deaths)
+    " at run time " .. string.format("%.1f", elapsedTimeAtDeath) .. "s. API deaths: " .. currentRun.progress.deaths)
 end
 
 ---Record a boss kill during the current run
 ---@param bossName string The name of the boss killed
----@param killTime number The time when the boss was killed (optional, defaults to current time)
+---@param killTime number The time when the boss was killed (optional, combat log timestamp)
 function Calculator:RecordBossKill(bossName, killTime)
   if not currentRun.isActive then
     return
   end
 
-  local actualKillTime = killTime or GetTime()
-  local elapsedTime = actualKillTime - currentRun.startTime
+  local actualKillTime = killTime or GetTime() -- killTime is a timestamp from combat log or GetTime() if not provided
+
+  if not currentRun.startTime then
+    PushMaster:Print("Error: currentRun.startTime not set, cannot accurately record boss kill time.")
+    return
+  end
+  local elapsedTimeAtKill = actualKillTime - currentRun.startTime
 
   table.insert(currentRun.bossKillTimes, {
     name = bossName,
-    killTime = elapsedTime,
+    killTime = elapsedTimeAtKill, -- Store elapsed time relative to run start
     bossNumber = #currentRun.bossKillTimes + 1
   })
 
   currentRun.progress.bosses = #currentRun.bossKillTimes
 
-  PushMaster:Print("Boss kill recorded: " .. bossName .. " at " .. string.format("%.1f", elapsedTime) .. "s")
+  PushMaster:Print("Boss kill recorded: " .. bossName .. " at " .. string.format("%.1f", elapsedTimeAtKill) .. "s")
 end
 
 ---Complete the current run
@@ -196,15 +214,18 @@ function Calculator:CompleteCurrentRun()
     return
   end
 
-  currentRun.completionTime = GetTime()
+  -- currentRun.completionTime = GetTime() -- This was original
+  -- The run is completed, the final elapsed time is already in currentRun.progress.elapsedTime from the hook
+  -- If we need an absolute timestamp for completion, GetTime() is fine here.
+  currentRun.completionTimeAbsolute = GetTime() -- Store absolute completion for reference
   currentRun.isActive = false
 
-  local totalTime = currentRun.completionTime - currentRun.startTime
+  local totalTime = currentRun.progress.elapsedTime -- This is the most accurate total time
 
   PushMaster:DebugPrint("Run completed in " .. string.format("%.1f", totalTime) .. "s")
 
   -- Store as best time if applicable
-  self:UpdateBestTime(currentRun)
+  self:UpdateBestTime(currentRun, totalTime) -- Pass totalTime explicitly
 end
 
 ---Reset the current run
@@ -223,8 +244,10 @@ function Calculator:ResetCurrentRun()
     deathTimes = {},
     playerLastDeathTimestamp = {}, -- Reset this too
     bossKillTimes = {},            -- NEW: Record exact boss kill times
-    trashMilestones = {},          -- NEW: Record trash progression milestones
-    progressHistory = {}
+    trashSamples = {},             -- NEW: Record trash progression samples
+    progressHistory = {},
+    loggedDeaths = {},
+    loggedDeathsByGUID = {}
   }
 
   PushMaster:DebugPrint("Current run reset")
@@ -238,13 +261,14 @@ end
 
 ---Update best time for a dungeon/key level combination
 ---@param runData table The completed run data
-function Calculator:UpdateBestTime(runData)
-  if not runData.instanceData or not runData.completionTime then
+function Calculator:UpdateBestTime(runData, totalTime)                 -- Added totalTime parameter
+  if not runData.instanceData or not runData.progress.elapsedTime then -- Check progress.elapsedTime
     return
   end
 
   local instanceData = runData.instanceData
-  local totalTime = runData.completionTime - runData.startTime
+  -- local totalTime = runData.completionTime - runData.startTime -- Original logic
+  -- totalTime is now passed as a parameter, which is runData.progress.elapsedTime
 
   -- Create key for this dungeon/level combination
   local dungeonKey = instanceData.currentMapID .. "_" .. instanceData.cmLevel
@@ -260,8 +284,8 @@ function Calculator:UpdateBestTime(runData)
       date = date("%Y-%m-%d %H:%M:%S"),
       deaths = runData.progress.deaths,
       affixes = instanceData.affixes,
-      bossKillTimes = runData.bossKillTimes or {},    -- NEW: Store exact boss kill times
-      trashMilestones = runData.trashMilestones or {} -- NEW: Store trash progression milestones
+      bossKillTimes = runData.bossKillTimes or {}, -- NEW: Store exact boss kill times
+      trashSamples = runData.trashSamples or {}    -- NEW: Store trash progression samples
     }
     PushMaster:DebugPrint("New best time recorded: " .. string.format("%.1f", totalTime) .. "s")
   elseif totalTime < bestTimes[instanceData.currentMapID][instanceData.cmLevel].time then
@@ -270,8 +294,8 @@ function Calculator:UpdateBestTime(runData)
       date = date("%Y-%m-%d %H:%M:%S"),
       deaths = runData.progress.deaths,
       affixes = instanceData.affixes,
-      bossKillTimes = runData.bossKillTimes or {},    -- NEW: Store exact boss kill times
-      trashMilestones = runData.trashMilestones or {} -- NEW: Store trash progression milestones
+      bossKillTimes = runData.bossKillTimes or {}, -- NEW: Store exact boss kill times
+      trashSamples = runData.trashSamples or {}    -- NEW: Store trash progression samples
     }
     PushMaster:DebugPrint("Best time improved: " .. string.format("%.1f", totalTime) .. "s")
   end
@@ -459,36 +483,30 @@ end
 ---@return number trashDelta Percentage difference in trash progress
 function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
   local currentTrash = currentRun.progress.trash
-  local bestMilestones = bestTime.trashMilestones or {}
+  local bestSamples = bestTime.trashSamples or {}
 
   -- GHOST CAR LOGIC: What trash % did the best run have at this exact time?
   local ghostCarTrash = 0
 
-  if next(bestMilestones) then
-    -- Find the exact trash progress the ghost car had at this elapsed time
-    local lowerMilestone, lowerTime = 0, 0
-    local upperMilestone, upperTime = 100, bestTime.time
-
-    -- Find the milestones that bracket our current time
-    for milestone, time in pairs(bestMilestones) do
-      if time <= elapsedTime and milestone > lowerMilestone then
-        lowerMilestone = milestone
-        lowerTime = time
-      elseif time > elapsedTime and milestone < upperMilestone then
-        upperMilestone = milestone
-        upperTime = time
+  if next(bestSamples) then
+    -- Find the two samples that bracket the current time
+    local lower = { time = 0, trash = 0 }
+    local upper = { time = bestTime.time, trash = 100 }
+    for _, sample in ipairs(bestSamples) do
+      if sample.time <= elapsedTime and sample.time >= lower.time then
+        lower = sample
+      elseif sample.time >= elapsedTime and sample.time <= upper.time then
+        upper = sample
       end
     end
-
-    -- Interpolate between milestones to get exact ghost car progress
-    if upperTime > lowerTime then
-      local timeProgress = (elapsedTime - lowerTime) / (upperTime - lowerTime)
-      ghostCarTrash = lowerMilestone + (timeProgress * (upperMilestone - lowerMilestone))
+    -- Interpolate between samples
+    if upper.time > lower.time then
+      local tProg = (elapsedTime - lower.time) / (upper.time - lower.time)
+      ghostCarTrash = lower.trash + (upper.trash - lower.trash) * tProg
     else
-      ghostCarTrash = lowerMilestone
+      ghostCarTrash = lower.trash
     end
   else
-    -- Fallback to simple linear if no milestone data
     ghostCarTrash = (elapsedTime / bestTime.time) * 100
   end
 
@@ -590,7 +608,7 @@ end
 ---@return table weights Table containing bossWeight and trashWeight
 function Calculator:CalculateDungeonWeights(bestTime)
   local bossKillTimes = bestTime.bossKillTimes or {}
-  local trashMilestones = bestTime.trashMilestones or {}
+  local trashSamples = bestTime.trashSamples or {}
   local totalTime = bestTime.time or 1800 -- fallback to 30 minutes
 
   -- Calculate total time spent on bosses
@@ -602,9 +620,9 @@ function Calculator:CalculateDungeonWeights(bestTime)
     if bossKill and bossKill.killTime then
       -- Find the trash milestone just before this boss
       local trashTimeBeforeBoss = 0
-      for trashPercent, trashTime in pairs(trashMilestones) do
-        if trashTime <= bossKill.killTime and trashTime > trashTimeBeforeBoss then
-          trashTimeBeforeBoss = trashTime
+      for _, sample in ipairs(trashSamples) do
+        if sample.time <= bossKill.killTime and sample.time > trashTimeBeforeBoss then
+          trashTimeBeforeBoss = sample.time
         end
       end
 
