@@ -113,6 +113,22 @@ local function getCurrentTrashProgress()
     percentage = (criteriaInfo.quantity / criteriaInfo.totalQuantity) * 100
   end
 
+  -- FIX: Clamp percentage to prevent going above 100% due to API inconsistencies
+  local originalPercentage = percentage
+  percentage = math.max(0, math.min(100, percentage))
+
+  -- DEBUG: Log when we have to clamp values
+  if originalPercentage > 100 then
+    PushMaster:DebugPrint(string.format(
+    "WARNING: Trash percentage exceeded 100%% - API returned %.2f%%, clamped to %.2f%%", originalPercentage, percentage))
+    PushMaster:DebugPrint(string.format(
+      "Raw API data - quantity: %s, totalQuantity: %s, isWeighted: %s, quantityString: %s",
+      tostring(criteriaInfo.quantity),
+      tostring(criteriaInfo.totalQuantity),
+      tostring(criteriaInfo.isWeightedProgress),
+      tostring(criteriaInfo.quantityString)))
+  end
+
   return percentage
 end
 

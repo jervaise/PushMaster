@@ -1460,14 +1460,71 @@ end
 ---@return number timeDelta Time difference in seconds (positive = behind, negative = ahead)
 ---@return number timeConfidence Confidence percentage (0-100)
 function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
-  if not bestTime or not progressEfficiency then
+  if not bestTime then
     return nil, 0 -- No data available
   end
 
-  -- Method 1: Efficiency-based projection
-  -- If we're +15% efficient, we should finish 15% faster
-  local projectedTotalTime = bestTime.time * (1 - (progressEfficiency / 100))
-  local timeDelta = projectedTotalTime - bestTime.time
+  -- Method: Direct pace comparison based on current progress
+  -- Find what time the best run had at our current progress level
+  local currentTrash = currentRun.progress.trash
+  local currentBosses = currentRun.progress.bosses
+
+  -- Find the best run's time when it had similar progress
+  local bestRunTimeAtSimilarProgress = nil
+  local calculationMethod = "none"
+  local methodDetails = ""
+
+  -- First try to match by trash percentage (most accurate for most of the run)
+  if bestTime.trashSamples and #bestTime.trashSamples > 0 then
+    -- Use interpolation for more accurate results instead of just finding first match
+    local lower = { time = 0, trash = 0 }
+    local upper = { time = bestTime.time, trash = 100 }
+
+    for _, sample in ipairs(bestTime.trashSamples) do
+      if sample.trash <= currentTrash and sample.trash >= lower.trash then
+        lower = sample
+      elseif sample.trash >= currentTrash and sample.trash <= upper.trash then
+        upper = sample
+      end
+    end
+
+    -- Interpolate between samples for smoother calculation
+    if upper.time > lower.time and upper.trash > lower.trash then
+      local trashProgress = (currentTrash - lower.trash) / (upper.trash - lower.trash)
+      bestRunTimeAtSimilarProgress = lower.time + (upper.time - lower.time) * trashProgress
+      calculationMethod = "trash_interpolation"
+      methodDetails = string.format("%.1f%% between samples at %.1fs-%.1fs", currentTrash, lower.time, upper.time)
+    elseif lower.trash == currentTrash then
+      bestRunTimeAtSimilarProgress = lower.time
+      calculationMethod = "trash_exact"
+      methodDetails = string.format("%.1f%% exact match at %.1fs", currentTrash, lower.time)
+    end
+  end
+
+  -- If we couldn't match by trash, try to match by boss count
+  if not bestRunTimeAtSimilarProgress and bestTime.bossKillTimes then
+    if currentBosses > 0 and currentBosses <= #bestTime.bossKillTimes then
+      local bossKill = bestTime.bossKillTimes[currentBosses]
+      if bossKill and bossKill.killTime then
+        bestRunTimeAtSimilarProgress = bossKill.killTime
+        calculationMethod = "boss_count"
+        methodDetails = string.format("%d bosses at %.1fs", currentBosses, bossKill.killTime)
+      end
+    end
+  end
+
+  -- If we still don't have a comparison point, fall back to proportional estimate
+  if not bestRunTimeAtSimilarProgress then
+    -- Estimate based on overall completion percentage
+    local estimatedProgress = math.max(currentTrash / 100, currentBosses / 4) -- Assume 4 bosses max
+    estimatedProgress = math.min(estimatedProgress, 0.95)                     -- Cap at 95% to avoid division issues
+    bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
+    calculationMethod = "proportional"
+    methodDetails = string.format("%.1f%% estimated progress", estimatedProgress * 100)
+  end
+
+  -- Calculate direct time difference at this progress point
+  local timeDelta = elapsedTime - bestRunTimeAtSimilarProgress
 
   -- Calculate confidence based on run progress and data quality
   local confidence = 0
@@ -1487,20 +1544,37 @@ function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progre
     confidence = 90 -- Late run, high confidence
   end
 
-  -- Reduce confidence if efficiency is extreme (likely inaccurate)
-  local efficiencyMagnitude = math.abs(progressEfficiency)
-  if efficiencyMagnitude > 50 then
-    confidence = confidence * 0.5 -- Very extreme efficiency, reduce confidence
-  elseif efficiencyMagnitude > 25 then
-    confidence = confidence * 0.8 -- Moderate extreme efficiency
+  -- Adjust confidence based on calculation method
+  if calculationMethod == "trash_interpolation" then
+    confidence = math.min(100, confidence + 15) -- Highest confidence
+  elseif calculationMethod == "trash_exact" then
+    confidence = math.min(100, confidence + 10) -- High confidence
+  elseif calculationMethod == "boss_count" then
+    confidence = math.max(20, confidence - 10)  -- Lower confidence
+  else                                          -- proportional
+    confidence = math.max(10, confidence - 20)  -- Lowest confidence
+  end
+
+  -- Boost confidence if we have good trash sample data
+  if bestTime.trashSamples and #bestTime.trashSamples > 10 then
+    confidence = math.min(100, confidence + 5)
+  end
+
+  -- Reduce confidence if time delta is extremely large (likely inaccurate)
+  local deltaMinutes = math.abs(timeDelta) / 60
+  if deltaMinutes > 10 then
+    confidence = confidence * 0.3 -- Very extreme delta, likely calculation error
+  elseif deltaMinutes > 5 then
+    confidence = confidence * 0.7 -- Large delta, reduce confidence
   end
 
   -- Ensure confidence is within bounds
   confidence = math.max(0, math.min(100, confidence))
 
+  -- Enhanced debug logging with method information
   PushMaster:DebugPrint(string.format(
-    "Time Delta: %.1f%% efficiency -> %+.0fs delta (%.0f%% confidence)",
-    progressEfficiency, timeDelta, confidence))
+    "Time Delta: %s method (%s) -> %+.0fs delta vs best run (%.0f%% confidence)",
+    calculationMethod, methodDetails, timeDelta, confidence))
 
   return timeDelta, confidence
 end
