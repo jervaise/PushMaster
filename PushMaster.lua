@@ -6,11 +6,11 @@
 local addonName, addonTable = ...
 
 -- Create main addon table and make it globally accessible
-PushMaster = {}
+PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "AceEvent-3.0")
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "0.9.2"
+PushMaster.version = "0.9.3"
 PushMaster.author = "Loading..."
 
 -- Debug mode flag
@@ -40,6 +40,12 @@ end
 ---Toggle debug mode
 function PushMaster:ToggleDebug()
   debugMode = not debugMode
+
+  -- Save debug mode setting immediately
+  if PushMasterDB and PushMasterDB.settings then
+    PushMasterDB.settings.debugMode = debugMode
+  end
+
   self:Print("Debug mode " .. (debugMode and "enabled" or "disabled"))
 end
 
@@ -55,28 +61,46 @@ local function onAddonLoaded(loadedAddonName)
 
   PushMaster:DebugPrint("Addon loaded, initializing...")
 
-  -- Initialize saved variables (use placeholder version for now)
-  if not PushMasterDB then
-    PushMasterDB = {
-      version = "0.9.2", -- Use hardcoded version for initial setup
-      bestTimes = {},
-      settings = {
-        debugMode = false,
-        showMainFrame = true,
-        enabled = true,
-        framePosition = { x = 100, y = -100 }
-      },
-      minimap = {
-        hide = false,
-        minimapPos = 220,
-        radius = 80
+  -- Initialize saved variables with defaults
+  local function initializeSavedVariables()
+    -- Set up default saved variables structure
+    local defaults = {
+      profile = {
+        version = "0.9.3", -- Use hardcoded version for initial setup
+        ui = {
+          mainFrame = {
+            position = { point = "CENTER", x = 0, y = 0 },
+            scale = 1.0,
+            alpha = 1.0,
+            locked = false,
+            theme = "default"
+          },
+          minimap = {
+            hide = false,
+            minimapPos = 220
+          }
+        },
+        settings = {
+          enableDebug = false,
+          enableTestMode = false,
+          autoHide = true,
+          updateFrequency = 1.0
+        },
+        data = {
+          bestTimes = {},
+          statistics = {}
+        }
       }
     }
-    PushMaster:Print("First time setup completed")
-  else
-    -- Migration will be handled in PLAYER_LOGIN after metadata is loaded
-    PushMaster:DebugPrint("Existing database found, migration will be handled after login")
+
+    -- Merge defaults with existing saved variables
+    if PushMasterDB then
+      PushMasterDB.profile = PushMasterDB.profile or {}
+      PushMasterDB.profile = LibStub("AceDB-3.0"):New("PushMasterDB", defaults.profile):Merge(PushMasterDB.profile)
+    end
   end
+
+  initializeSavedVariables()
 
   -- Load debug mode setting
   if PushMasterDB.settings and PushMasterDB.settings.debugMode ~= nil then
@@ -106,12 +130,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.9.2"
+      PushMaster.version = "0.9.3"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.2"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.3"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC
@@ -308,13 +332,43 @@ _G.PushMaster = PushMaster
 SLASH_PUSHMASTER1 = "/pm"
 
 SlashCmdList["PUSHMASTER"] = function(msg)
-  -- Toggle settings frame on /pm (same as minimap left-click)
-  if PushMaster.UI and PushMaster.UI.SettingsFrame then
-    local settings = PushMaster.UI.SettingsFrame
-    if settings:IsShown() then
-      settings:Hide()
+  local command = string.lower((msg or ""):match("^%s*(.-)%s*$"))
+
+  if command == "debug" then
+    -- Toggle debug mode
+    PushMaster:ToggleDebug()
+  elseif command == "test" then
+    -- Start test mode
+    if PushMaster.UI and PushMaster.UI.TestMode then
+      PushMaster.UI.TestMode:StartTest()
     else
-      settings:Show()
+      PushMaster:Print("Test mode not available")
+    end
+  elseif command == "reset" then
+    -- Reset current run
+    if PushMaster.Data and PushMaster.Data.Calculator then
+      PushMaster.Data.Calculator:ResetCurrentRun()
+      PushMaster:Print("Current run reset")
+    else
+      PushMaster:Print("Calculator not available")
+    end
+  elseif command == "help" then
+    -- Show help
+    PushMaster:Print("Available commands:")
+    PushMaster:Print("  /pm - Toggle settings frame")
+    PushMaster:Print("  /pm debug - Toggle debug mode")
+    PushMaster:Print("  /pm test - Start test mode")
+    PushMaster:Print("  /pm reset - Reset current run")
+    PushMaster:Print("  /pm help - Show this help")
+  else
+    -- Default behavior: Toggle settings frame on /pm (same as minimap left-click)
+    if PushMaster.UI and PushMaster.UI.SettingsFrame then
+      local settings = PushMaster.UI.SettingsFrame
+      if settings:IsShown() then
+        settings:Hide()
+      else
+        settings:Show()
+      end
     end
   end
 end

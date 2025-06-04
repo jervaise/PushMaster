@@ -309,11 +309,11 @@ function TestMode:testLoop()
       if Calculator then
         local comparison = Calculator:GetCurrentComparison()
         if comparison then
-          PushMaster:Print(string.format("Run complete! Efficiency %+d%% | Trash %+d%% | Boss %+d | Deaths %d",
+          PushMaster:Print(string.format("Run complete! Efficiency %+d%% | Trash %+d%% | Boss %+d | Deaths %+d",
             comparison.progressEfficiency,
             comparison.trashProgress,
             comparison.bossProgress,
-            comparison.progress.deaths))
+            comparison.deathProgress or 0))
         end
       end
 
@@ -384,10 +384,11 @@ function TestMode:testLoop()
               currentStage.time, currentStage.trash, currentStage.bosses, currentStage.deaths))
 
             -- The best run values are calculated internally by the Calculator
-            PushMaster:Print(string.format("  * Best Run vs Current: Efficiency:%+d%% Trash:%+d%% Bosses:%+d",
+            PushMaster:Print(string.format("  * Best Run vs Current: Efficiency:%+d%% Trash:%+d%% Bosses:%+d Deaths:%+d",
               comparison.progressEfficiency,
               comparison.trashProgress,
-              comparison.bossProgress))
+              comparison.bossProgress,
+              comparison.deathProgress or 0))
           end
         end
 

@@ -23,7 +23,7 @@ local GetInstanceInfo = GetInstanceInfo
 -- PERFORMANCE OPTIMIZATION: Cache frequently accessed data
 local lastTrashPercent = 0
 local lastUpdateTime = 0
-local TRASH_UPDATE_THROTTLE = 0.1 -- Only process trash updates every 100ms (was 500ms)
+local TRASH_UPDATE_THROTTLE = 1.0 -- PERFORMANCE FIX: Increased to 1s to reduce CPU load
 
 -- CRITICAL FIX: Cache combat log function to prevent repeated calls
 local CombatLogGetCurrentEventInfo = CombatLogGetCurrentEventInfo
@@ -40,6 +40,124 @@ local DEATH_EVENTS = {
   ["PARTY_KILL"] = true,
   ["SPELL_INSTAKILL"] = true
 }
+
+-- Timer for continuous progress checking (backup for when events stop firing)
+local progressCheckTimer = nil
+local PROGRESS_CHECK_INTERVAL = 2.0 -- PERFORMANCE FIX: Increased to 2s to reduce CPU load
+
+-- Timer update throttling
+local lastTimerUpdate = 0
+local TIMER_UPDATE_THROTTLE = 2.0 -- PERFORMANCE FIX: Increased to 2s to reduce CPU load
+
+-- PERFORMANCE FIX: Cache scenario API calls to reduce overhead
+local scenarioCache = {
+  lastUpdate = 0,
+  cacheDuration = 0.5, -- Cache for 0.5 seconds
+  steps = nil,
+  criteriaInfo = nil
+}
+
+---Get cached scenario data to reduce API calls
+---@return number|nil steps, table|nil criteriaInfo
+local function getCachedScenarioData()
+  local now = GetTime()
+  if now - scenarioCache.lastUpdate < scenarioCache.cacheDuration then
+    return scenarioCache.steps, scenarioCache.criteriaInfo
+  end
+
+  -- Update cache
+  local _, _, steps = C_Scenario.GetStepInfo()
+  local criteriaInfo = nil
+
+  if steps and steps > 0 then
+    criteriaInfo = C_ScenarioInfo.GetCriteriaInfo(steps)
+  end
+
+  scenarioCache.steps = steps
+  scenarioCache.criteriaInfo = criteriaInfo
+  scenarioCache.lastUpdate = now
+
+  return steps, criteriaInfo
+end
+
+---Get current trash progress from scenario API
+---@return number|nil trashPercent Current trash percentage or nil if not available
+local function getCurrentTrashProgress()
+  local steps, criteriaInfo = getCachedScenarioData()
+
+  if not steps or steps <= 0 then
+    return nil
+  end
+
+  if not criteriaInfo or not criteriaInfo.quantity or not criteriaInfo.totalQuantity then
+    return nil
+  end
+
+  -- Handle weighted progress like MythicPlusTimer does
+  local percentage
+  if criteriaInfo.isWeightedProgress and criteriaInfo.quantityString then
+    -- For weighted progress, extract the numeric value from quantityString
+    -- but then calculate percentage as: (extracted_value / totalQuantity) * 100
+    local numericValue = tonumber(string.sub(criteriaInfo.quantityString, 1, string.len(criteriaInfo.quantityString) - 1))
+    if numericValue and criteriaInfo.totalQuantity > 0 then
+      percentage = (numericValue / criteriaInfo.totalQuantity) * 100
+    else
+      return nil
+    end
+  else
+    -- For non-weighted progress, calculate percentage from quantity/totalQuantity
+    -- SAFETY: Prevent division by zero
+    if criteriaInfo.totalQuantity == 0 then
+      return nil
+    end
+    percentage = (criteriaInfo.quantity / criteriaInfo.totalQuantity) * 100
+  end
+
+  return percentage
+end
+
+---Timer-based progress checker (backup for when events stop firing)
+local function checkProgressTimer()
+  -- Only run if we're tracking a run
+  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+    return
+  end
+
+  local currentTrash = getCurrentTrashProgress()
+  if not currentTrash then
+    return
+  end
+
+  -- Use same epsilon comparison as the event handler
+  local epsilon = 0.01
+  if math.abs(currentTrash - (lastTrashPercent or 0)) > epsilon then
+    lastTrashPercent = currentTrash
+
+    -- Update progress in Calculator
+    PushMaster.Data.Calculator:UpdateProgress({
+      trash = currentTrash
+    })
+  end
+end
+
+---Start the progress check timer
+local function startProgressTimer()
+  if progressCheckTimer then
+    progressCheckTimer:Cancel()
+  end
+
+  progressCheckTimer = C_Timer.NewTicker(PROGRESS_CHECK_INTERVAL, checkProgressTimer)
+  PushMaster:DebugPrint("Started progress check timer (backup system)")
+end
+
+---Stop the progress check timer
+local function stopProgressTimer()
+  if progressCheckTimer then
+    progressCheckTimer:Cancel()
+    progressCheckTimer = nil
+    PushMaster:DebugPrint("Stopped progress check timer")
+  end
+end
 
 ---Event handler function
 ---@param self Frame
@@ -181,6 +299,9 @@ local function onChallengeModeStart(...)
     PushMaster.Data.Calculator:StartNewRun(instanceData)
   end
 
+  -- Start the progress check timer (backup system)
+  startProgressTimer()
+
   -- Show UI
   if PushMaster.UI and PushMaster.UI.MainFrame then
     PushMaster.UI.MainFrame:Show()
@@ -191,6 +312,9 @@ end
 ---@param ... any Event arguments
 local function onChallengeModeCompleted(...)
   PushMaster:DebugPrint("Challenge Mode completed")
+
+  -- Stop the progress check timer
+  stopProgressTimer()
 
   -- Complete the run in Calculator
   if PushMaster.Data.Calculator then
@@ -205,6 +329,9 @@ end
 ---@param ... any Event arguments
 local function onChallengeModeReset(...)
   PushMaster:DebugPrint("Challenge Mode reset")
+
+  -- Stop the progress check timer
+  stopProgressTimer()
 
   -- Reset tracking in Calculator
   if PushMaster.Data.Calculator then
@@ -287,20 +414,15 @@ local function onScenarioCriteriaUpdate(...)
     return
   end
 
-  local _, _, steps = C_Scenario.GetStepInfo()
-  if not steps or steps <= 0 then
+  -- Use the cached helper function to get current progress (reduces API calls)
+  local currentTrash = getCurrentTrashProgress()
+  if not currentTrash then
     return
   end
 
-  local criteriaInfo = C_ScenarioInfo.GetCriteriaInfo(steps)
-  if not criteriaInfo or not criteriaInfo.quantity or not criteriaInfo.totalQuantity then
-    return
-  end
-
-  local currentTrash = (criteriaInfo.quantity / criteriaInfo.totalQuantity) * 100
-
-  -- Always update if the trash percentage has changed, respecting the throttle.
-  local shouldUpdate = (currentTrash ~= lastTrashPercent)
+  -- FIX: Use a small epsilon for floating-point comparison instead of exact equality
+  local epsilon = 0.01 -- 0.01% threshold
+  local shouldUpdate = math.abs(currentTrash - (lastTrashPercent or 0)) > epsilon
 
   if not shouldUpdate then
     return
@@ -313,8 +435,6 @@ local function onScenarioCriteriaUpdate(...)
   PushMaster.Data.Calculator:UpdateProgress({
     trash = currentTrash
   })
-
-  PushMaster:DebugPrint(string.format("Trash progress updated: %.1f%%", currentTrash))
 end
 
 ---Handle player entering world (for reconnections, reloads)
@@ -403,9 +523,49 @@ local function onBlizzardTimerUpdate(self, elapsedTime)
     return
   end
 
+  -- Throttle timer updates to prevent spam
+  local now = GetTime()
+  if now - lastTimerUpdate < TIMER_UPDATE_THROTTLE then
+    return
+  end
+  lastTimerUpdate = now
+
   -- Pass the authoritative elapsed time to the Calculator's UpdateProgress
   -- We only pass elapsedTime here. Trash and other progress will be updated by their respective events.
   PushMaster.Data.Calculator:UpdateProgress({ elapsedTime = elapsedTime })
+end
+
+---Handle zone change event
+---@param ... any Event arguments
+local function onZoneChanged(...)
+  PushMaster:DebugPrint("Zone changed")
+
+  -- Don't interfere with zone changes during active challenge modes
+  -- The challenge mode events will handle starting/stopping tracking appropriately
+  local isInChallengeMode = C_ChallengeMode.GetActiveChallengeMapID() ~= nil
+  if isInChallengeMode then
+    PushMaster:DebugPrint("Zone changed during active challenge mode - ignoring to avoid interference")
+    return
+  end
+
+  local instanceData = getCurrentInstanceData()
+  if not instanceData then
+    PushMaster:DebugPrint("Not in an instance, hiding UI")
+
+    -- Stop the progress check timer when leaving instance
+    stopProgressTimer()
+
+    -- Hide UI when not in an instance
+    if PushMaster.UI and PushMaster.UI.MainFrame then
+      PushMaster.UI.MainFrame:Hide()
+    end
+    return
+  end
+
+  PushMaster:DebugPrint("In instance: " .. instanceData.zoneName)
+
+  -- Note: We don't need to update Calculator with zone info during active runs
+  -- The challenge mode events handle that appropriately
 end
 
 ---Initialize the event handling system
@@ -431,6 +591,9 @@ function EventHandlers:Initialize()
   else
     PushMaster:Print("Error: Could not hook Blizzard M+ Timer. Timer accuracy may be affected.")
   end
+
+  -- Register zone change event
+  self:RegisterEvent("ZONE_CHANGED", onZoneChanged)
 end
 
 ---Start tracking events

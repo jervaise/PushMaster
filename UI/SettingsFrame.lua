@@ -322,6 +322,12 @@ local function createSettingsFrame()
   elements.clearDataButton:SetPoint("TOP", elements.resetPosButton, "BOTTOM", 0, -15)
   elements.clearDataButton:SetText("Clear Best Times")
 
+  -- SAVED VARIABLES OPTIMIZATION: Add stats button (removed cleanup button)
+  elements.statsButton = CreateFrame("Button", "PushMasterStatsButton", rightBox, "UIPanelButtonTemplate")
+  elements.statsButton:SetSize(140, 30)
+  elements.statsButton:SetPoint("TOP", elements.clearDataButton, "BOTTOM", 0, -15)
+  elements.statsButton:SetText("Data Statistics")
+
   -- === FOOTER WITH VERSION INFO ===
 
   -- Create footer frame
@@ -371,7 +377,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.2"   -- Fallback version
+    local version = "0.9.3"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -496,6 +502,11 @@ local function setupEventHandlers()
   -- Clear data button
   elements.clearDataButton:SetScript("OnClick", function()
     StaticPopup_Show("PUSHMASTER_RESET_CONFIRM")
+  end)
+
+  -- Stats button
+  elements.statsButton:SetScript("OnClick", function()
+    SettingsFrame:ShowDataStatistics()
   end)
 
   PushMaster:DebugPrint("Event handlers setup")
@@ -682,7 +693,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.2"   -- Fallback version
+    local version = "0.9.3"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -715,4 +726,122 @@ function SettingsFrame:RefreshFooter()
     elements.versionText:SetText("PushMaster v" .. version .. " by " .. author)
     PushMaster:DebugPrint("Footer refreshed: v" .. version .. " by " .. author)
   end
+end
+
+---Show data statistics dialog
+function SettingsFrame:ShowDataStatistics()
+  if not PushMaster.Data.Calculator then
+    PushMaster:Print("Calculator module not available.")
+    return
+  end
+
+  -- Get statistics from Calculator
+  local stats = PushMaster.Data.Calculator:GetSavedVariablesStats()
+  local settings = PushMaster.Data.Calculator:GetOptimizationSettings()
+
+  -- Create statistics frame
+  local statsFrame = CreateFrame("Frame", "PushMasterStatsFrame", UIParent, "BackdropTemplate")
+  statsFrame:SetSize(450, 350)
+  statsFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+  statsFrame:SetFrameStrata("DIALOG")
+  statsFrame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true,
+    tileSize = 32,
+    edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 }
+  })
+  statsFrame:SetBackdropColor(0, 0, 0, 1)
+
+  -- Title
+  local title = statsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  title:SetPoint("TOP", statsFrame, "TOP", 0, -20)
+  title:SetText("Saved Variables Statistics")
+  title:SetTextColor(1, 0.82, 0) -- Gold color
+
+  -- Create scrollable content area
+  local scrollFrame = CreateFrame("ScrollFrame", nil, statsFrame, "UIPanelScrollFrameTemplate")
+  scrollFrame:SetPoint("TOPLEFT", statsFrame, "TOPLEFT", 20, -50)
+  scrollFrame:SetPoint("BOTTOMRIGHT", statsFrame, "BOTTOMRIGHT", -40, 50)
+
+  local contentFrame = CreateFrame("Frame", nil, scrollFrame)
+  contentFrame:SetSize(380, 400)
+  scrollFrame:SetScrollChild(contentFrame)
+
+  -- Statistics content
+  local yOffset = -10
+  local lineHeight = 20
+
+  local function addStatLine(label, value, color)
+    local line = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    line:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 10, yOffset)
+    line:SetText(label .. ": " .. tostring(value))
+    if color then
+      line:SetTextColor(color.r, color.g, color.b)
+    else
+      line:SetTextColor(0.9, 0.9, 0.9)
+    end
+    yOffset = yOffset - lineHeight
+    return line
+  end
+
+  -- File size information
+  addStatLine("=== STORAGE USAGE ===", "", { r = 1, g = 0.82, b = 0 })
+  addStatLine("Total Data Size", string.format("%.1f KB", stats.totalSize / 1024), { r = 0.8, g = 1, b = 0.8 })
+  addStatLine("Dungeon Count", stats.dungeonCount)
+  addStatLine("Key Level Variants", stats.levelCount)
+  addStatLine("Total Best Time Entries", stats.totalEntries)
+
+  yOffset = yOffset - 10
+  addStatLine("=== DATA BREAKDOWN ===", "", { r = 1, g = 0.82, b = 0 })
+  addStatLine("Average Trash Samples per Entry", string.format("%.1f", stats.averageTrashSamples))
+  addStatLine("Average Boss Kills per Entry", string.format("%.1f", stats.averageBossKills))
+  addStatLine("Total Trash Samples Stored", stats.totalTrashSamples)
+  addStatLine("Total Boss Kill Records", stats.totalBossKills)
+
+  yOffset = yOffset - 10
+  addStatLine("=== OPTIMIZATION SETTINGS ===", "", { r = 1, g = 0.82, b = 0 })
+  addStatLine("Max Trash Samples per Entry", settings.maxTrashSamples, { r = 0.8, g = 0.8, b = 1 })
+  addStatLine("Max Boss Records per Entry", settings.maxBossKillTimes, { r = 0.8, g = 0.8, b = 1 })
+  addStatLine("Data Retention (days)", settings.maxOldDataDays, { r = 0.8, g = 0.8, b = 1 })
+  addStatLine("Compression Enabled", settings.compressionEnabled and "Yes" or "No",
+    settings.compressionEnabled and { r = 0.8, g = 1, b = 0.8 } or { r = 1, g = 0.8, b = 0.8 })
+
+  yOffset = yOffset - 10
+  addStatLine("=== RECOMMENDATIONS ===", "", { r = 1, g = 0.82, b = 0 })
+
+  -- Provide recommendations based on data size
+  if stats.totalSize > 100000 then -- > 100KB
+    addStatLine("• Large dataset - automatic cleanup on restart", "", { r = 1, g = 1, b = 0.8 })
+  end
+
+  if stats.averageTrashSamples > settings.maxTrashSamples then
+    addStatLine("• Trash samples will be compressed automatically", "", { r = 1, g = 1, b = 0.8 })
+  end
+
+  if stats.totalEntries > 50 then
+    addStatLine("• Large dataset - automatic optimization active", "", { r = 1, g = 1, b = 0.8 })
+  else
+    addStatLine("• Data size is optimal", "", { r = 0.8, g = 1, b = 0.8 })
+  end
+
+  -- Buttons
+  local closeButton = CreateFrame("Button", nil, statsFrame, "UIPanelCloseButton")
+  closeButton:SetPoint("TOPRIGHT", statsFrame, "TOPRIGHT", -3, -3)
+  closeButton:SetScript("OnClick", function()
+    statsFrame:Hide()
+  end)
+
+  local refreshButton = CreateFrame("Button", nil, statsFrame, "UIPanelButtonTemplate")
+  refreshButton:SetSize(80, 25)
+  refreshButton:SetPoint("BOTTOM", statsFrame, "BOTTOM", 0, 15)
+  refreshButton:SetText("Refresh")
+  refreshButton:SetScript("OnClick", function()
+    statsFrame:Hide()
+    SettingsFrame:ShowDataStatistics() -- Reopen with fresh data
+  end)
+
+  statsFrame:Show()
+  PushMaster:DebugPrint("Data statistics dialog shown")
 end

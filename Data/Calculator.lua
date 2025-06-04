@@ -29,7 +29,8 @@ local currentRun = {
     trash = 0,
     bosses = 0,
     deaths = 0,
-    elapsedTime = 0
+    elapsedTime = 0,
+    timeLostToDeaths = 0
   },
   deathTimes = {},
   playerLastDeathTimestamp = {}, -- NEW: Track last death timestamp per player GUID
@@ -40,8 +41,212 @@ local currentRun = {
   loggedDeathsByGUID = {}
 }
 
+-- PERFORMANCE OPTIMIZATION: Cache calculation results to avoid repeated expensive operations
+local calculationCache = {
+  dungeonWeights = { data = nil, bestTimeHash = nil },
+  trashDelta = { data = nil, lastTrash = nil, lastTime = nil },
+  bossDelta = { data = nil, lastBossCount = nil, lastTime = nil },
+  deathDelta = { data = nil, lastDeathCount = nil, lastTime = nil },
+  lastDebugTime = 0,
+  debugThrottle = 5.0 -- PERFORMANCE FIX: Increased to 5 seconds to reduce spam
+}
+
+-- SAVED VARIABLES OPTIMIZATION: Limits to prevent bloating
+local SAVED_VARS_LIMITS = {
+  maxBestTimesPerDungeon = 3, -- Only keep best 3 times per dungeon/level
+  maxTrashSamples = 20,       -- Compress to 20 key samples instead of hundreds
+  maxBossKillTimes = 10,      -- Limit boss data
+  maxOldDataDays = 90,        -- Remove data older than 90 days
+  compressionEnabled = true,  -- Enable data compression
+  cleanupOnStartup = true     -- Clean up on addon load
+}
+
 -- Best times storage (will be loaded from saved variables)
 local bestTimes = {}
+
+-- Add throttling variables at the top of the file
+local lastProgressDebugTime = 0
+local PROGRESS_DEBUG_THROTTLE = 5.0 -- PERFORMANCE FIX: Increased to 5 seconds to reduce spam
+
+---Compress trash samples to reduce saved variable size
+---@param trashSamples table Full trash samples array
+---@return table compressedSamples Compressed samples (key milestones only)
+local function compressTrashSamples(trashSamples)
+  if not trashSamples or #trashSamples == 0 then
+    return {}
+  end
+
+  local compressed = {}
+  local targetSamples = SAVED_VARS_LIMITS.maxTrashSamples
+  local totalSamples = #trashSamples
+
+  if totalSamples <= targetSamples then
+    return trashSamples -- No compression needed
+  end
+
+  -- Always include first and last samples
+  table.insert(compressed, trashSamples[1])
+
+  -- Calculate step size for even distribution
+  local step = math.max(1, math.floor(totalSamples / (targetSamples - 2)))
+
+  -- Add evenly distributed samples
+  for i = step, totalSamples - step, step do
+    if #compressed < targetSamples - 1 then
+      table.insert(compressed, trashSamples[i])
+    end
+  end
+
+  -- Always include final sample
+  if #compressed < targetSamples then
+    table.insert(compressed, trashSamples[totalSamples])
+  end
+
+  PushMaster:DebugPrint(string.format("Compressed trash samples: %d -> %d (%.1f%% reduction)",
+    totalSamples, #compressed, (1 - #compressed / totalSamples) * 100))
+
+  return compressed
+end
+
+---Compress boss kill times to essential data only
+---@param bossKillTimes table Full boss kill times array
+---@return table compressedBoss Compressed boss data
+local function compressBossKillTimes(bossKillTimes)
+  if not bossKillTimes or #bossKillTimes == 0 then
+    return {}
+  end
+
+  local compressed = {}
+  local maxBosses = math.min(#bossKillTimes, SAVED_VARS_LIMITS.maxBossKillTimes)
+
+  for i = 1, maxBosses do
+    local boss = bossKillTimes[i]
+    if boss then
+      -- Store only essential data
+      table.insert(compressed, {
+        name = boss.name or ("Boss " .. i),
+        killTime = boss.killTime,
+        bossNumber = i
+      })
+    end
+  end
+
+  return compressed
+end
+
+---Clean up old best times data to prevent indefinite growth
+---@param bestTimesData table The best times data to clean
+---@return table cleanedData Cleaned best times data
+local function cleanupOldBestTimes(bestTimesData)
+  if not bestTimesData or not SAVED_VARS_LIMITS.cleanupOnStartup then
+    return bestTimesData
+  end
+
+  local cleaned = {}
+  local currentTime = time()
+  local maxAge = SAVED_VARS_LIMITS.maxOldDataDays * 24 * 60 * 60 -- Convert days to seconds
+  local removedCount = 0
+  local totalCount = 0
+
+  for mapID, levels in pairs(bestTimesData) do
+    for level, data in pairs(levels) do
+      totalCount = totalCount + 1
+
+      -- Parse date string to timestamp for age comparison
+      local dataTime = 0
+      if data.date then
+        local year, month, day, hour, min, sec = data.date:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+        if year then
+          dataTime = time({
+            year = tonumber(year),
+            month = tonumber(month),
+            day = tonumber(day),
+            hour = tonumber(hour),
+            min = tonumber(min),
+            sec = tonumber(sec)
+          })
+        end
+      end
+
+      -- Keep data if it's recent enough or if we can't parse the date
+      local age = currentTime - dataTime
+      if dataTime == 0 or age <= maxAge then
+        if not cleaned[mapID] then
+          cleaned[mapID] = {}
+        end
+        cleaned[mapID][level] = data
+      else
+        removedCount = removedCount + 1
+      end
+    end
+  end
+
+  if removedCount > 0 then
+    PushMaster:Print(string.format("Cleaned up %d old best times (older than %d days)",
+      removedCount, SAVED_VARS_LIMITS.maxOldDataDays))
+  end
+
+  PushMaster:DebugPrint(string.format("Best times cleanup: %d/%d entries kept",
+    totalCount - removedCount, totalCount))
+
+  return cleaned
+end
+
+---Limit the number of best times per dungeon/level to prevent bloating
+---@param bestTimesData table The best times data
+---@return table limitedData Limited best times data
+local function limitBestTimesPerDungeon(bestTimesData)
+  if not bestTimesData then
+    return {}
+  end
+
+  local limited = {}
+  local removedCount = 0
+  local totalCount = 0
+
+  for mapID, levels in pairs(bestTimesData) do
+    limited[mapID] = {}
+
+    for level, data in pairs(levels) do
+      totalCount = totalCount + 1
+
+      -- For now, keep only the single best time per level
+      -- Future enhancement: Could keep top N times
+      limited[mapID][level] = data
+    end
+  end
+
+  PushMaster:DebugPrint(string.format("Best times limiting: %d entries processed", totalCount))
+  return limited
+end
+
+---Optimize saved variables data before saving
+---@param runData table The run data to optimize
+---@return table optimizedData Optimized run data for saving
+local function optimizeRunDataForSaving(runData)
+  if not runData then
+    return nil
+  end
+
+  local optimized = {
+    time = runData.progress.elapsedTime,
+    date = date("%Y-%m-%d %H:%M:%S"),
+    deaths = runData.progress.deaths,
+    affixes = runData.instanceData.affixes,
+    deathTimes = runData.deathTimes or {} -- Include death times for delta comparison
+  }
+
+  -- Compress heavy data arrays
+  if SAVED_VARS_LIMITS.compressionEnabled then
+    optimized.bossKillTimes = compressBossKillTimes(runData.bossKillTimes or {})
+    optimized.trashSamples = compressTrashSamples(runData.trashSamples or {})
+  else
+    optimized.bossKillTimes = runData.bossKillTimes or {}
+    optimized.trashSamples = runData.trashSamples or {}
+  end
+
+  return optimized
+end
 
 ---Initialize the Calculator module
 function Calculator:Initialize()
@@ -49,7 +254,27 @@ function Calculator:Initialize()
 
   -- Load best times from saved variables
   if PushMasterDB and PushMasterDB.bestTimes then
-    bestTimes = PushMasterDB.bestTimes
+    -- SAVED VARIABLES OPTIMIZATION: Clean up data on startup
+    local originalSize = self:_calculateDataSize(PushMasterDB.bestTimes)
+
+    -- Apply cleanup and optimization
+    local cleanedData = cleanupOldBestTimes(PushMasterDB.bestTimes)
+    cleanedData = limitBestTimesPerDungeon(cleanedData)
+
+    bestTimes = cleanedData
+    PushMasterDB.bestTimes = cleanedData
+
+    local newSize = self:_calculateDataSize(cleanedData)
+    local reduction = originalSize > 0 and ((originalSize - newSize) / originalSize * 100) or 0
+
+    if reduction > 5 then -- Only report significant reductions
+      PushMaster:Print(string.format("Optimized saved variables: %.1f%% size reduction", reduction))
+    end
+
+    PushMaster:DebugPrint(string.format("Best times loaded and optimized: %d bytes -> %d bytes (%.1f%% reduction)",
+      originalSize, newSize, reduction))
+  else
+    bestTimes = {}
   end
 end
 
@@ -61,6 +286,13 @@ function Calculator:StartNewRun(instanceData)
     return
   end
 
+  -- PERFORMANCE OPTIMIZATION: Clear calculation caches when starting new run
+  calculationCache.dungeonWeights = { data = nil, bestTimeHash = nil }
+  calculationCache.trashDelta = { data = nil, lastTrash = nil, lastTime = nil }
+  calculationCache.bossDelta = { data = nil, lastBossCount = nil, lastTime = nil }
+  calculationCache.deathDelta = { data = nil, lastDeathCount = nil, lastTime = nil }
+  calculationCache.lastDebugTime = 0
+
   -- Reset current run state
   currentRun = {
     isActive = true,
@@ -71,7 +303,8 @@ function Calculator:StartNewRun(instanceData)
       trash = 0,
       bosses = 0,
       deaths = 0,
-      elapsedTime = 0
+      elapsedTime = 0,
+      timeLostToDeaths = 0
     },
     deathTimes = {},
     playerLastDeathTimestamp = {}, -- Reset this too
@@ -98,10 +331,22 @@ function Calculator:UpdateProgress(progressData)
     return
   end
 
+  -- SAFETY: Validate progressData parameter
+  if not progressData or type(progressData) ~= "table" then
+    PushMaster:DebugPrint("Warning: Invalid progressData passed to UpdateProgress")
+    return
+  end
+
   local authoritativeElapsedTime
   if progressData.elapsedTime ~= nil then -- Check for nil explicitly
-    authoritativeElapsedTime = progressData.elapsedTime
-  elseif currentRun.startTime then        -- Fallback ONLY if hook somehow fails AND startTime exists
+    -- SAFETY: Validate elapsedTime is a positive number
+    if type(progressData.elapsedTime) == "number" and progressData.elapsedTime >= 0 then
+      authoritativeElapsedTime = progressData.elapsedTime
+    else
+      PushMaster:DebugPrint("Warning: Invalid elapsedTime value in progressData")
+      return
+    end
+  elseif currentRun.startTime then -- Fallback ONLY if hook somehow fails AND startTime exists
     authoritativeElapsedTime = GetTime() - currentRun.startTime
     PushMaster:DebugPrint("Warning: Using GetTime() fallback for elapsedTime in Calculator:UpdateProgress.")
   else
@@ -109,24 +354,40 @@ function Calculator:UpdateProgress(progressData)
     return -- Cannot proceed without a valid time
   end
 
-  -- Update current progress
-  if progressData.trash then
-    currentRun.progress.trash = progressData.trash
+  -- Update current progress with safety checks
+  if progressData.trash and type(progressData.trash) == "number" then
+    -- SAFETY: Clamp trash percentage to valid range
+    currentRun.progress.trash = math.max(0, math.min(100, progressData.trash))
+
+    -- Sample trash progress for ghost-car interpolation only when trash data is provided
+    currentRun.trashSamples = currentRun.trashSamples or {}
+    table.insert(currentRun.trashSamples, { time = authoritativeElapsedTime, trash = currentRun.progress.trash })
   end
 
   currentRun.progress.elapsedTime = authoritativeElapsedTime -- Store the authoritative time
-  -- Sample trash progress for ghost-car interpolation
-  currentRun.trashSamples = currentRun.trashSamples or {}
-  table.insert(currentRun.trashSamples, { time = authoritativeElapsedTime, trash = currentRun.progress.trash })
 
   -- NEW: Update death count from API
   if C_ChallengeMode and C_ChallengeMode.GetDeathCount then
     local apiDeathCount, apiTimeLost = C_ChallengeMode.GetDeathCount()
     if apiDeathCount and apiDeathCount ~= currentRun.progress.deaths then
-      PushMaster:DebugPrint(string.format("API Death Count Updated: %d (was %d). Time lost: %.1fs", apiDeathCount,
-        currentRun.progress.deaths, apiTimeLost or 0))
+      -- Death count increased - record the death time for ghost car comparison
+      if apiDeathCount > currentRun.progress.deaths then
+        -- Calculate how many new deaths occurred
+        local newDeaths = apiDeathCount - currentRun.progress.deaths
+        -- Record the current elapsed time for each new death
+        for i = 1, newDeaths do
+          table.insert(currentRun.deathTimes, authoritativeElapsedTime)
+        end
+        PushMaster:DebugPrint(string.format("API Death Count Updated: %d (was %d). Added %d death time(s) at %.1fs",
+          apiDeathCount, currentRun.progress.deaths, newDeaths, authoritativeElapsedTime))
+      end
+
       currentRun.progress.deaths = apiDeathCount
-      -- currentRun.progress.timeLostToDeaths = apiTimeLost -- Optional: store this if you want to use it
+    end
+
+    -- Store the actual time penalty from API
+    if apiTimeLost then
+      currentRun.progress.timeLostToDeaths = apiTimeLost
     end
   end
 
@@ -138,8 +399,13 @@ function Calculator:UpdateProgress(progressData)
     deaths = currentRun.progress.deaths
   })
 
-  PushMaster:DebugPrint(string.format("Progress updated: %.1f%% trash, %.1fs elapsed",
-    currentRun.progress.trash, authoritativeElapsedTime))
+  -- Throttle debug messages to reduce spam
+  local now = GetTime()
+  if now - lastProgressDebugTime >= PROGRESS_DEBUG_THROTTLE then
+    PushMaster:DebugPrint(string.format("Progress updated: %.1f%% trash, %.1fs elapsed",
+      currentRun.progress.trash, authoritativeElapsedTime))
+    lastProgressDebugTime = now
+  end
 end
 
 ---Record a death during the current run
@@ -174,7 +440,8 @@ function Calculator:RecordDeath(deathTime, playerGUID)
   end
 
   -- The primary currentRun.progress.deaths is now updated from C_ChallengeMode.GetDeathCount() in UpdateProgress.
-  -- This function, RecordDeath, is now primarily for detailed logging of individual death events.
+  -- Death times for ghost car comparison are also recorded there when API death count increases.
+  -- This function is now primarily for detailed logging of individual death events.
 
   PushMaster:DebugPrint("Logged death for " ..
     (playerGUID or "Unknown") ..
@@ -189,13 +456,33 @@ function Calculator:RecordBossKill(bossName, killTime)
     return
   end
 
+  -- SAFETY: Validate bossName parameter
+  if not bossName or type(bossName) ~= "string" or bossName == "" then
+    PushMaster:DebugPrint("Warning: Invalid bossName passed to RecordBossKill")
+    return
+  end
+
   local actualKillTime = killTime or GetTime() -- killTime is a timestamp from combat log or GetTime() if not provided
+
+  -- SAFETY: Validate killTime is a valid number
+  if type(actualKillTime) ~= "number" or actualKillTime < 0 then
+    PushMaster:DebugPrint("Warning: Invalid killTime passed to RecordBossKill")
+    return
+  end
 
   if not currentRun.startTime then
     PushMaster:Print("Error: currentRun.startTime not set, cannot accurately record boss kill time.")
     return
   end
   local elapsedTimeAtKill = actualKillTime - currentRun.startTime
+
+  -- SAFETY: Ensure elapsed time is reasonable (not negative, not excessively large)
+  if elapsedTimeAtKill < 0 then
+    PushMaster:DebugPrint("Warning: Negative elapsed time for boss kill, adjusting to 0")
+    elapsedTimeAtKill = 0
+  elseif elapsedTimeAtKill > 7200 then -- 2 hours seems like a reasonable maximum
+    PushMaster:DebugPrint("Warning: Excessively large elapsed time for boss kill")
+  end
 
   table.insert(currentRun.bossKillTimes, {
     name = bossName,
@@ -217,12 +504,20 @@ function Calculator:CompleteCurrentRun()
   -- currentRun.completionTime = GetTime() -- This was original
   -- The run is completed, the final elapsed time is already in currentRun.progress.elapsedTime from the hook
   -- If we need an absolute timestamp for completion, GetTime() is fine here.
-  currentRun.completionTimeAbsolute = GetTime() -- Store absolute completion for reference
-  currentRun.isActive = false
+  currentRun.completionTimeAbsolute = GetTime()     -- Store absolute completion for reference
 
   local totalTime = currentRun.progress.elapsedTime -- This is the most accurate total time
 
-  PushMaster:DebugPrint("Run completed in " .. string.format("%.1f", totalTime) .. "s")
+  -- Ensure final trash percentage is 100% at completion
+  currentRun.progress.trash = 100
+
+  -- Add final trash sample at 100% completion
+  currentRun.trashSamples = currentRun.trashSamples or {}
+  table.insert(currentRun.trashSamples, { time = totalTime, trash = 100 })
+
+  currentRun.isActive = false
+
+  PushMaster:DebugPrint("Run completed in " .. string.format("%.1f", totalTime) .. "s with final trash at 100%")
 
   -- Store as best time if applicable
   self:UpdateBestTime(currentRun, totalTime) -- Pass totalTime explicitly
@@ -230,6 +525,13 @@ end
 
 ---Reset the current run
 function Calculator:ResetCurrentRun()
+  -- PERFORMANCE OPTIMIZATION: Clear calculation caches when resetting run
+  calculationCache.dungeonWeights = { data = nil, bestTimeHash = nil }
+  calculationCache.trashDelta = { data = nil, lastTrash = nil, lastTime = nil }
+  calculationCache.bossDelta = { data = nil, lastBossCount = nil, lastTime = nil }
+  calculationCache.deathDelta = { data = nil, lastDeathCount = nil, lastTime = nil }
+  calculationCache.lastDebugTime = 0
+
   currentRun = {
     isActive = false,
     instanceData = nil,
@@ -239,7 +541,8 @@ function Calculator:ResetCurrentRun()
       trash = 0,
       bosses = 0,
       deaths = 0,
-      elapsedTime = 0
+      elapsedTime = 0,
+      timeLostToDeaths = 0
     },
     deathTimes = {},
     playerLastDeathTimestamp = {}, -- Reset this too
@@ -278,33 +581,31 @@ function Calculator:UpdateBestTime(runData, totalTime)                 -- Added 
     bestTimes[instanceData.currentMapID] = {}
   end
 
+  -- SAVED VARIABLES OPTIMIZATION: Use optimized data structure
+  local optimizedRunData = optimizeRunDataForSaving(runData)
+  optimizedRunData.time = totalTime -- Ensure we use the passed totalTime
+
   if not bestTimes[instanceData.currentMapID][instanceData.cmLevel] then
-    bestTimes[instanceData.currentMapID][instanceData.cmLevel] = {
-      time = totalTime,
-      date = date("%Y-%m-%d %H:%M:%S"),
-      deaths = runData.progress.deaths,
-      affixes = instanceData.affixes,
-      bossKillTimes = runData.bossKillTimes or {}, -- NEW: Store exact boss kill times
-      trashSamples = runData.trashSamples or {}    -- NEW: Store trash progression samples
-    }
+    bestTimes[instanceData.currentMapID][instanceData.cmLevel] = optimizedRunData
     PushMaster:DebugPrint("New best time recorded: " .. string.format("%.1f", totalTime) .. "s")
   elseif totalTime < bestTimes[instanceData.currentMapID][instanceData.cmLevel].time then
-    bestTimes[instanceData.currentMapID][instanceData.cmLevel] = {
-      time = totalTime,
-      date = date("%Y-%m-%d %H:%M:%S"),
-      deaths = runData.progress.deaths,
-      affixes = instanceData.affixes,
-      bossKillTimes = runData.bossKillTimes or {}, -- NEW: Store exact boss kill times
-      trashSamples = runData.trashSamples or {}    -- NEW: Store trash progression samples
-    }
+    bestTimes[instanceData.currentMapID][instanceData.cmLevel] = optimizedRunData
     PushMaster:DebugPrint("Best time improved: " .. string.format("%.1f", totalTime) .. "s")
   end
 
-  -- Save to persistent storage
+  -- Save to persistent storage with optimization
   if not PushMasterDB then
     PushMasterDB = {}
   end
   PushMasterDB.bestTimes = bestTimes
+
+  -- SAVED VARIABLES OPTIMIZATION: Report compression stats
+  local originalSamples = #(runData.trashSamples or {})
+  local compressedSamples = #(optimizedRunData.trashSamples or {})
+  if originalSamples > compressedSamples then
+    PushMaster:DebugPrint(string.format("Saved variables optimized: %d trash samples -> %d (%.1f%% reduction)",
+      originalSamples, compressedSamples, (1 - compressedSamples / originalSamples) * 100))
+  end
 end
 
 ---Get best time for current dungeon/level
@@ -380,7 +681,8 @@ function Calculator:GetCurrentComparison()
   local progressEfficiency = 0
   local trashProgress = 0
   local bossProgress = 0
-  local deathTimePenalty = currentRun.progress.deaths * 15 -- 15 seconds per death
+  local deathProgress = 0
+  local deathTimePenalty = currentRun.progress.timeLostToDeaths or 0
 
   if bestTime then
     -- INTELLIGENT PACE CALCULATION - Learn from actual run patterns
@@ -389,15 +691,17 @@ function Calculator:GetCurrentComparison()
     progressEfficiency = paceData.efficiency
     trashProgress = paceData.trashDelta
     bossProgress = paceData.bossDelta
+    deathProgress = paceData.deathDelta
 
-    PushMaster:DebugPrint(string.format("Intelligent pace: Efficiency %.1f%%, Trash %.1f%%, Boss %d",
-      progressEfficiency, trashProgress, bossProgress))
+    PushMaster:DebugPrint(string.format("Intelligent pace: Efficiency %.1f%%, Trash %.1f%%, Boss %d, Deaths %+d",
+      progressEfficiency, trashProgress, bossProgress, deathProgress))
   else
     -- No comparison data available yet, provide default values
     PushMaster:DebugPrint("No best time data available for intelligent comparison, using N/A values")
     progressEfficiency = nil -- Or some other indicator for "N/A"
     trashProgress = nil      -- Or some other indicator for "N/A"
     bossProgress = nil       -- Or some other indicator for "N/A"
+    deathProgress = nil      -- Or some other indicator for "N/A"
     -- We don't return nil here anymore, so the rest of the function will execute
   end
 
@@ -415,6 +719,11 @@ function Calculator:GetCurrentComparison()
   local finalBossProgress = bossProgress
   if finalBossProgress ~= nil then
     finalBossProgress = math.floor(finalBossProgress + 0.5)
+  end
+
+  local finalDeathProgress = deathProgress
+  if finalDeathProgress ~= nil then
+    finalDeathProgress = math.floor(finalDeathProgress + 0.5)
   end
 
   -- overallSpeed is based on the original progressEfficiency before flooring for this specific calculation
@@ -442,6 +751,7 @@ function Calculator:GetCurrentComparison()
     progressEfficiency = finalProgressEfficiency,
     trashProgress = finalTrashProgress,
     bossProgress = finalBossProgress,
+    deathProgress = finalDeathProgress,
     deathTimePenalty = deathTimePenalty,
     -- Keep for backward compatibility
     overallSpeed = finalOverallSpeed
@@ -465,6 +775,10 @@ function Calculator:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
   -- Compare actual boss kill timing vs best run
   local bossDelta = self:CalculateBossDelta(currentRun, bestTime, elapsedTime)
 
+  -- PRECISE DEATH COMPARISON
+  -- Compare death count at this time vs best run
+  local deathDelta = self:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
+
   -- OVERALL EFFICIENCY CALCULATION
   -- Combine trash and boss performance with learned weights
   local efficiency = self:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun, bestTime, elapsedTime)
@@ -472,7 +786,8 @@ function Calculator:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
   return {
     efficiency = efficiency,
     trashDelta = trashDelta,
-    bossDelta = bossDelta
+    bossDelta = bossDelta,
+    deathDelta = deathDelta
   }
 end
 
@@ -483,6 +798,15 @@ end
 ---@return number trashDelta Percentage difference in trash progress
 function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
   local currentTrash = currentRun.progress.trash
+
+  -- PERFORMANCE OPTIMIZATION: Cache trash delta if inputs haven't changed
+  if calculationCache.trashDelta.data and
+      calculationCache.trashDelta.lastTrash == currentTrash and
+      calculationCache.trashDelta.lastTime and
+      math.abs(calculationCache.trashDelta.lastTime - elapsedTime) < 0.5 then -- Allow 0.5s tolerance
+    return calculationCache.trashDelta.data
+  end
+
   local bestSamples = bestTime.trashSamples or {}
 
   -- GHOST CAR LOGIC: What trash % did the best run have at this exact time?
@@ -501,13 +825,31 @@ function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
     end
     -- Interpolate between samples
     if upper.time > lower.time then
-      local tProg = (elapsedTime - lower.time) / (upper.time - lower.time)
-      ghostCarTrash = lower.trash + (upper.trash - lower.trash) * tProg
+      -- SAFETY: Explicit check to prevent division by zero (should never happen due to if condition, but being explicit)
+      local timeDiff = upper.time - lower.time
+      if timeDiff > 0 then
+        local tProg = (elapsedTime - lower.time) / timeDiff
+        ghostCarTrash = lower.trash + (upper.trash - lower.trash) * tProg
+      else
+        ghostCarTrash = lower.trash
+      end
     else
-      ghostCarTrash = lower.trash
+      -- SAFETY: Ensure bestTime.time is not zero before division
+      if bestTime.time and bestTime.time > 0 then
+        ghostCarTrash = (elapsedTime / bestTime.time) * 100
+      else
+        -- Fallback: assume linear progression if no valid time data
+        ghostCarTrash = 0
+      end
     end
   else
-    ghostCarTrash = (elapsedTime / bestTime.time) * 100
+    -- SAFETY: Ensure bestTime.time is not zero before division
+    if bestTime.time and bestTime.time > 0 then
+      ghostCarTrash = (elapsedTime / bestTime.time) * 100
+    else
+      -- Fallback: assume linear progression if no valid time data
+      ghostCarTrash = 0
+    end
   end
 
   -- Cap ghost car trash to reasonable bounds
@@ -516,10 +858,18 @@ function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
   -- Calculate delta: positive = current run ahead, negative = current run behind
   local trashDelta = currentTrash - ghostCarTrash
 
-  -- Debug: Show ghost car logic for trash
-  PushMaster:DebugPrint(string.format(
-    "Ghost Car Trash: Time %.1fs | Current: %.1f%% | Ghost Car: %.1f%% | Delta: %+.1f%%",
-    elapsedTime, currentTrash, ghostCarTrash, trashDelta))
+  -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+  local now = GetTime()
+  if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+    PushMaster:DebugPrint(string.format(
+      "Ghost Car Trash: Time %.1fs | Current: %.1f%% | Ghost Car: %.1f%% | Delta: %+.1f%%",
+      elapsedTime, currentTrash, ghostCarTrash, trashDelta))
+  end
+
+  -- Cache the result
+  calculationCache.trashDelta.data = trashDelta
+  calculationCache.trashDelta.lastTrash = currentTrash
+  calculationCache.trashDelta.lastTime = elapsedTime
 
   return trashDelta
 end
@@ -531,12 +881,23 @@ end
 ---@return number bossDelta Boss count difference (positive = ahead, negative = behind)
 function Calculator:CalculateBossDelta(currentRun, bestTime, elapsedTime)
   local currentBossCount = #currentRun.bossKillTimes
+
+  -- PERFORMANCE OPTIMIZATION: Cache boss delta if inputs haven't changed
+  if calculationCache.bossDelta.data and
+      calculationCache.bossDelta.lastBossCount == currentBossCount and
+      calculationCache.bossDelta.lastTime and
+      math.abs(calculationCache.bossDelta.lastTime - elapsedTime) < 0.5 then -- Allow 0.5s tolerance
+    return calculationCache.bossDelta.data
+  end
+
   local bestBossKillTimes = bestTime.bossKillTimes or {}
 
   -- GHOST CAR LOGIC: How many bosses did the best run have killed by this exact time?
   local ghostCarBossCount = 0
   for i = 1, #bestBossKillTimes do
-    if bestBossKillTimes[i].killTime <= elapsedTime then
+    -- SAFETY: Check if boss kill data exists and has valid killTime
+    local bossKill = bestBossKillTimes[i]
+    if bossKill and bossKill.killTime and bossKill.killTime <= elapsedTime then
       ghostCarBossCount = ghostCarBossCount + 1
     end
   end
@@ -544,17 +905,66 @@ function Calculator:CalculateBossDelta(currentRun, bestTime, elapsedTime)
   -- Calculate delta: positive = current run ahead, negative = current run behind
   local bossDelta = currentBossCount - ghostCarBossCount
 
-  -- Debug: Show ghost car logic
-  PushMaster:DebugPrint(string.format(
-    "Ghost Car Boss: Time %.1fs | Current: %d bosses | Ghost Car: %d bosses | Delta: %+d",
-    elapsedTime, currentBossCount, ghostCarBossCount, bossDelta))
+  -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+  local now = GetTime()
+  if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+    PushMaster:DebugPrint(string.format(
+      "Ghost Car Boss: Time %.1fs | Current: %d bosses | Ghost Car: %d bosses | Delta: %+d",
+      elapsedTime, currentBossCount, ghostCarBossCount, bossDelta))
+  end
 
-  -- DETAILED DEBUG: Show every minute comparison (commented out to reduce spam)
-  -- PushMaster:Print(string.format(
-  --   "DEBUG - Time %.0fs | Real Car: %d bosses | Ghost Car: %d bosses | Delta: %+d",
-  --   elapsedTime, currentBossCount, ghostCarBossCount, bossDelta))
+  -- Cache the result
+  calculationCache.bossDelta.data = bossDelta
+  calculationCache.bossDelta.lastBossCount = currentBossCount
+  calculationCache.bossDelta.lastTime = elapsedTime
 
   return bossDelta
+end
+
+---Calculate death progress delta using precise timing comparison
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number deathDelta Death count difference (positive = more deaths than best run, negative = fewer deaths)
+function Calculator:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
+  local currentDeathCount = currentRun.progress.deaths
+
+  -- PERFORMANCE OPTIMIZATION: Cache death delta if inputs haven't changed
+  if calculationCache.deathDelta.data and
+      calculationCache.deathDelta.lastDeathCount == currentDeathCount and
+      calculationCache.deathDelta.lastTime and
+      math.abs(calculationCache.deathDelta.lastTime - elapsedTime) < 0.5 then -- Allow 0.5s tolerance
+    return calculationCache.deathDelta.data
+  end
+
+  -- Get death data from best run - we need to reconstruct this from logged deaths
+  local bestDeathTimes = bestTime.deathTimes or {}
+
+  -- GHOST CAR LOGIC: How many deaths did the best run have by this exact time?
+  local ghostCarDeathCount = 0
+  for _, deathTime in ipairs(bestDeathTimes) do
+    if deathTime <= elapsedTime then
+      ghostCarDeathCount = ghostCarDeathCount + 1
+    end
+  end
+
+  -- Calculate delta: positive = current run has more deaths, negative = current run has fewer deaths
+  local deathDelta = currentDeathCount - ghostCarDeathCount
+
+  -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+  local now = GetTime()
+  if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+    PushMaster:DebugPrint(string.format(
+      "Ghost Car Deaths: Time %.1fs | Current: %d deaths | Ghost Car: %d deaths | Delta: %+d",
+      elapsedTime, currentDeathCount, ghostCarDeathCount, deathDelta))
+  end
+
+  -- Cache the result
+  calculationCache.deathDelta.data = deathDelta
+  calculationCache.deathDelta.lastDeathCount = currentDeathCount
+  calculationCache.deathDelta.lastTime = elapsedTime
+
+  return deathDelta
 end
 
 ---Calculate boss timing efficiency based on actual kill times vs best run
@@ -607,6 +1017,13 @@ end
 ---@param bestTime table Best time data with boss kill times and trash milestones
 ---@return table weights Table containing bossWeight, trashWeight, and per-boss weights
 function Calculator:CalculateDungeonWeights(bestTime)
+  -- PERFORMANCE OPTIMIZATION: Cache dungeon weights since they don't change for the same best time
+  local bestTimeHash = bestTime.time .. "_" .. #(bestTime.bossKillTimes or {}) .. "_" .. #(bestTime.trashSamples or {})
+
+  if calculationCache.dungeonWeights.data and calculationCache.dungeonWeights.bestTimeHash == bestTimeHash then
+    return calculationCache.dungeonWeights.data
+  end
+
   local bossKillTimes = bestTime.bossKillTimes or {}
   local trashSamples = bestTime.trashSamples or {}
   local totalTime = bestTime.time or 1800 -- fallback to 30 minutes
@@ -642,9 +1059,13 @@ function Calculator:CalculateDungeonWeights(bestTime)
         difficultyRating = estimatedBossFightTime / 60 -- Bosses taking longer are "harder"
       }
 
-      PushMaster:DebugPrint(string.format(
-        "Boss %d (%s): Kill at %.1fs, Fight time %.1fs, Weight %.3f (%.1f%% of total time)",
-        i, bossKill.name or "Unknown", bossKill.killTime, estimatedBossFightTime, bossWeight, bossWeight * 100))
+      -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+      local now = GetTime()
+      if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+        PushMaster:DebugPrint(string.format(
+          "Boss %d (%s): Kill at %.1fs, Fight time %.1fs, Weight %.3f (%.1f%% of total time)",
+          i, bossKill.name or "Unknown", bossKill.killTime, estimatedBossFightTime, bossWeight, bossWeight * 100))
+      end
     end
   end
 
@@ -675,11 +1096,16 @@ function Calculator:CalculateDungeonWeights(bestTime)
     end
   end
 
-  PushMaster:DebugPrint(string.format(
-    "Dynamic weights calculated: Overall Boss %.1f%% (%.1fs), Trash %.1f%% (%.1fs), Total %.1fs",
-    overallBossWeight * 100, totalBossTime, overallTrashWeight * 100, totalTrashTime, totalTime))
+  -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+  local now = GetTime()
+  if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+    PushMaster:DebugPrint(string.format(
+      "Dynamic weights calculated: Overall Boss %.1f%% (%.1fs), Trash %.1f%% (%.1fs), Total %.1fs",
+      overallBossWeight * 100, totalBossTime, overallTrashWeight * 100, totalTrashTime, totalTime))
+    calculationCache.lastDebugTime = now
+  end
 
-  return {
+  local result = {
     bossWeight = overallBossWeight,
     trashWeight = overallTrashWeight,
     totalBossTime = totalBossTime,
@@ -687,6 +1113,12 @@ function Calculator:CalculateDungeonWeights(bestTime)
     perBossData = bossData,
     hasBossData = #bossData > 0
   }
+
+  -- Cache the result
+  calculationCache.dungeonWeights.data = result
+  calculationCache.dungeonWeights.bestTimeHash = bestTimeHash
+
+  return result
 end
 
 ---Calculate boss count impact with dynamic per-boss weighting
@@ -784,11 +1216,26 @@ function Calculator:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun
   local bossCountImpact = self:CalculateDynamicBossCountImpact(bossDelta, currentRun, bestTime, elapsedTime, weights)
   efficiency = efficiency + (bossCountImpact * bossCountWeight)
 
-  -- Apply death penalty impact (reserve 30% for death penalty and learning factors)
-  local deathPenalty = currentRun.progress.deaths * 15 -- 15 seconds per death
+  -- Apply death penalty impact - direct time impact, not weighted
+  local currentDeathTimePenalty = currentRun.progress.timeLostToDeaths or 0
+  local bestRunDeathTimePenalty = 0
+
+  -- Calculate what the death time penalty was for the best run at this elapsed time
+  if bestTime.deathTimes then
+    for _, deathTime in ipairs(bestTime.deathTimes) do
+      if deathTime <= elapsedTime then
+        bestRunDeathTimePenalty = bestRunDeathTimePenalty + 15 -- Each death costs 15 seconds
+      end
+    end
+  end
+
+  -- Calculate death time penalty delta (how much more/less time penalty vs best run)
+  local deathTimeDelta = currentDeathTimePenalty - bestRunDeathTimePenalty
   local deathImpact = 0
   if bestTime.time > 0 then
-    deathImpact = -(deathPenalty / bestTime.time) * 100 * 0.3 -- 30% weight for death impact
+    -- Convert time penalty delta directly to efficiency impact (no arbitrary weighting)
+    -- If you're 30 seconds behind due to deaths in a 1800s dungeon, that's -1.67% efficiency
+    deathImpact = -(deathTimeDelta / bestTime.time) * 100
     efficiency = efficiency + deathImpact
   end
 
@@ -798,13 +1245,17 @@ function Calculator:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun
   -- Cap to reasonable bounds
   efficiency = math.max(-100, math.min(100, efficiency))
 
-  PushMaster:DebugPrint(string.format(
-    "Fully Dynamic Efficiency: Trash %.1f%% (%.1f × %.1f), Boss Timing %.1f%% (%.1f × %.1f), Boss Count %.1f%% (%.1f × %.1f), Deaths %.1f%%, Final %.1f%%",
-    trashDelta * trashWeight, trashDelta, trashWeight,
-    bossTimingEfficiency * bossTimingWeight, bossTimingEfficiency, bossTimingWeight,
-    bossCountImpact * bossCountWeight, bossCountImpact, bossCountWeight,
-    deathImpact,
-    efficiency))
+  -- PERFORMANCE OPTIMIZATION: Throttle debug messages
+  local now = GetTime()
+  if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
+    PushMaster:DebugPrint(string.format(
+      "Fully Dynamic Efficiency: Trash %.1f%% (%.1f × %.1f), Boss Timing %.1f%% (%.1f × %.1f), Boss Count %.1f%% (%.1f × %.1f), Death Time Penalty %.1fs vs %.1fs (%.1f%%), Final %.1f%%",
+      trashDelta * trashWeight, trashDelta, trashWeight,
+      bossTimingEfficiency * bossTimingWeight, bossTimingEfficiency, bossTimingWeight,
+      bossCountImpact * bossCountWeight, bossCountImpact, bossCountWeight,
+      currentDeathTimePenalty, bestRunDeathTimePenalty, deathImpact,
+      efficiency))
+  end
 
   return efficiency
 end
@@ -902,4 +1353,97 @@ end
 ---@return table bestTimes The best times data
 function Calculator:GetBestTimes()
   return bestTimes or {}
+end
+
+---Calculate approximate data size for optimization reporting
+---@param data table The data to calculate size for
+---@return number size Approximate size in bytes
+function Calculator:_calculateDataSize(data)
+  if not data then
+    return 0
+  end
+
+  local function calculateTableSize(t, visited)
+    visited = visited or {}
+    if visited[t] then
+      return 0 -- Avoid infinite recursion
+    end
+    visited[t] = true
+
+    local size = 0
+    for k, v in pairs(t) do
+      -- Key size
+      if type(k) == "string" then
+        size = size + #k
+      elseif type(k) == "number" then
+        size = size + 8
+      end
+
+      -- Value size
+      if type(v) == "string" then
+        size = size + #v
+      elseif type(v) == "number" then
+        size = size + 8
+      elseif type(v) == "table" then
+        size = size + calculateTableSize(v, visited)
+      elseif type(v) == "boolean" then
+        size = size + 1
+      end
+    end
+    return size
+  end
+
+  return calculateTableSize(data)
+end
+
+---Get saved variables optimization settings
+---@return table settings Current optimization settings
+function Calculator:GetOptimizationSettings()
+  return SAVED_VARS_LIMITS
+end
+
+---Get saved variables statistics
+---@return table stats Statistics about saved variables usage
+function Calculator:GetSavedVariablesStats()
+  if not PushMasterDB or not PushMasterDB.bestTimes then
+    return {
+      totalSize = 0,
+      dungeonCount = 0,
+      levelCount = 0,
+      totalEntries = 0,
+      averageTrashSamples = 0,
+      averageBossKills = 0
+    }
+  end
+
+  local stats = {
+    totalSize = self:_calculateDataSize(PushMasterDB.bestTimes),
+    dungeonCount = 0,
+    levelCount = 0,
+    totalEntries = 0,
+    totalTrashSamples = 0,
+    totalBossKills = 0
+  }
+
+  for mapID, levels in pairs(PushMasterDB.bestTimes) do
+    stats.dungeonCount = stats.dungeonCount + 1
+
+    for level, data in pairs(levels) do
+      stats.levelCount = stats.levelCount + 1
+      stats.totalEntries = stats.totalEntries + 1
+
+      if data.trashSamples then
+        stats.totalTrashSamples = stats.totalTrashSamples + #data.trashSamples
+      end
+
+      if data.bossKillTimes then
+        stats.totalBossKills = stats.totalBossKills + #data.bossKillTimes
+      end
+    end
+  end
+
+  stats.averageTrashSamples = stats.totalEntries > 0 and (stats.totalTrashSamples / stats.totalEntries) or 0
+  stats.averageBossKills = stats.totalEntries > 0 and (stats.totalBossKills / stats.totalEntries) or 0
+
+  return stats
 end

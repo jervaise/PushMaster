@@ -69,5 +69,6 @@
     "UIDropDownMenu_SetText",
     "UIDropDownMenu_AddButton",
     "UIDropDownMenu_CreateInfo"
-  ]
+  ],
+  "Lua.type.weakUnionCheck": true
 }

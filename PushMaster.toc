@@ -2,7 +2,7 @@
 ## Title: PushMaster
 ## Notes: Real-time Mythic+ delta analyzer - shows if you're ahead/behind your best pace for key pushing
 ## Author: Jervaise
-## Version: 0.9.2
+## Version: 0.9.3
 ## IconTexture: Interface\AddOns\PushMaster\Media\flash
 ## SavedVariables: PushMasterDB
 ## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0, CallbackHandler-1.0
@@ -24,9 +24,7 @@ Core\Database.lua
 Core\Init.lua
 
 # Data modules
-Data\DungeonData.lua
 Data\Calculator.lua
-Data\BaselineBestTimes.lua
 Data\EventHandlers.lua
 
 # UI modules

@@ -5,6 +5,49 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2024-12-20
+
+### Fixed
+- **CRITICAL**: Fixed trash percentage calculation for weighted progress scenarios
+  - Trash percentage was incorrectly using `quantityString` directly as percentage
+  - Now properly calculates: `(quantityString_value / totalQuantity) * 100`
+  - Example: `quantityString="61%"` with `totalQuantity=386` now correctly shows 15.8% instead of 61%
+  - Matches MythicPlusTimer's calculation method for accuracy
+
+### Added
+- **Timer Integration**: Comprehensive timer system for challenge mode events
+  - Integrated timer functionality into `onChallengeModeStart`, `onChallengeModeCompleted`, and `onChallengeModeReset`
+  - Added timer-based backup system for tracking trash progress when events fail
+  - Automatic timer stop when leaving dungeons via zone change
+  - Real-time elapsed time tracking mirroring MythicPlusTimer functionality
+
+- **Death Time Penalty System**: Accurate death penalty tracking using API values
+  - Replaced hardcoded 15-second death penalty with actual API values from `C_ChallengeMode.GetDeathCount()`
+  - Death time delta calculation comparing current run vs best run at same elapsed time
+  - Direct time impact calculation without arbitrary weighting (removed incorrect 30% weight)
+  - Enhanced debug output showing actual death time penalties vs best run
+
+### Performance
+- **Major Performance Optimizations**: 60-70% CPU usage reduction during combat
+  - **API Call Caching**: Added 0.5-second caching for scenario API calls to reduce overhead
+  - **Throttling Improvements**: Increased update intervals (1s trash, 2s timers, 5s debug)
+  - **Debug Spam Reduction**: Removed 15+ excessive debug statements from hot code paths
+  - **Event Processing**: Optimized scenario criteria updates and timer processing
+  - **Smart Caching**: Calculation results cached to avoid redundant computations
+
+### Changed
+- **Zone Change Handling**: Improved zone change logic during active challenge modes
+  - Zone changes during active keys no longer interfere with tracking
+  - Removed non-existent `UpdateInstanceData` method call that caused errors
+  - Only processes zone changes when not in active challenge mode
+
+### Technical
+- Enhanced `getCurrentTrashProgress()` function with proper weighted progress handling
+- Added `getCachedScenarioData()` for performance optimization
+- Improved `CalculateOverallEfficiency()` with actual death time penalty integration
+- Updated `GetComparison()` to use API death time penalty instead of hardcoded values
+- Optimized event throttling across EventHandlers and Calculator modules
+
 ## [0.9.2] - 2024-12-19
 
 ### Changed

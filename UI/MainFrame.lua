@@ -27,6 +27,13 @@ local lastDisplayValues = {
   keystoneHeader = nil
 }
 
+-- PERFORMANCE OPTIMIZATION: Cache last comparison data to prevent redundant calculations
+local lastComparisonCache = {
+  data = nil,
+  timestamp = 0,
+  cacheValidityDuration = 1.5 -- Cache is valid for 1.5 seconds
+}
+
 -- UI elements
 local elements = {
   displayText = nil,
@@ -57,7 +64,7 @@ local COLORS = {
 
 -- Timer for regular UI updates
 local updateTimer = nil
-local UPDATE_INTERVAL = 1.0 -- Update every 1 second
+local UPDATE_INTERVAL = 2.0 -- PERFORMANCE FIX: Reduced from 1.0s to 2.0s to halve CPU load
 
 -- Forward declare timer functions so they can be called from MainFrame methods
 local startUpdateTimer, stopUpdateTimer
@@ -71,7 +78,22 @@ startUpdateTimer = function()
   updateTimer = C_Timer.NewTicker(UPDATE_INTERVAL, function()
     -- Only update if we have an active Calculator and are tracking a run
     if PushMaster.Data and PushMaster.Data.Calculator and PushMaster.Data.Calculator:IsTrackingRun() then
-      local comparison = PushMaster.Data.Calculator:GetCurrentComparison()
+      -- PERFORMANCE OPTIMIZATION: Check cache first
+      local now = GetTime()
+      local comparison = nil
+
+      if lastComparisonCache.data and (now - lastComparisonCache.timestamp) < lastComparisonCache.cacheValidityDuration then
+        -- Use cached data if still valid
+        comparison = lastComparisonCache.data
+      else
+        -- Get fresh data and cache it
+        comparison = PushMaster.Data.Calculator:GetCurrentComparison()
+        if comparison then
+          lastComparisonCache.data = comparison
+          lastComparisonCache.timestamp = now
+        end
+      end
+
       if comparison and MainFrame:IsShown() then
         MainFrame:UpdateDisplay(comparison)
       end
@@ -272,17 +294,32 @@ local function formatBossCount(value)
   return color .. sign .. tostring(value) .. COLORS.RESET
 end
 
----Format death count without time penalty
----@param deathCount number Number of deaths
+---Format death count delta with appropriate color
+---@param deathDelta number The death count difference vs best run
 ---@param timePenalty number Time penalty in seconds (unused now)
----@return string formattedText Colored and formatted death info
-local function formatDeaths(deathCount, timePenalty)
-  if not deathCount or deathCount == 0 then
-    return COLORS.GREEN .. "0" .. COLORS.RESET
+---@return string formattedText Colored and formatted death delta
+local function formatDeaths(deathDelta, timePenalty)
+  if deathDelta == nil then                     -- Explicitly check for nil
+    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- No comparison data available
   end
 
-  -- Just show death count without time penalty
-  return COLORS.RED .. "+" .. deathCount .. COLORS.RESET
+  local color
+  local sign = ""
+
+  if deathDelta > 0 then
+    color = COLORS.RED
+    sign = "+"
+  elseif deathDelta < 0 then
+    color = COLORS.GREEN
+    sign = "" -- Negative sign is already included in the number
+  else
+    -- Neutral value (exactly 0) - same deaths as best run
+    color = COLORS.GREEN
+    sign = ""
+  end
+
+  -- Show the actual delta value with proper sign
+  return color .. sign .. tostring(deathDelta) .. COLORS.RESET
 end
 
 ---Update the display with current comparison data
@@ -303,7 +340,7 @@ function MainFrame:UpdateDisplay(comparisonData)
   local overallText = formatPercentage(comparisonData.progressEfficiency, true)
   local trashText = formatPercentage(comparisonData.trashProgress, true)
   local bossText = formatBossCount(comparisonData.bossProgress)
-  local deathText = formatDeaths(comparisonData.progress.deaths, comparisonData.deathTimePenalty)
+  local deathText = formatDeaths(comparisonData.deathProgress, comparisonData.deathTimePenalty)
   local keystoneText = string.format("%s +%d", comparisonData.dungeon or "Unknown", comparisonData.level or 0)
 
   -- PERFORMANCE OPTIMIZATION: Only update text when it actually changes
@@ -355,12 +392,24 @@ function MainFrame:ResetDisplayCache()
   PushMaster:DebugPrint("Display cache reset")
 end
 
+---Clear the comparison cache (called when run state changes)
+function MainFrame:ClearCache()
+  lastComparisonCache.data = nil
+  lastComparisonCache.timestamp = 0
+end
+
 ---Show the main frame
 function MainFrame:Show()
+  if not isInitialized then
+    self:Initialize()
+  end
+
+  -- Clear cache when showing to ensure fresh data
+  self:ClearCache()
+
   if frame then
     frame:Show()
-    startUpdateTimer() -- Start regular updates when showing
-    PushMaster:DebugPrint("MainFrame shown")
+    startUpdateTimer()
   end
 end
 
@@ -368,10 +417,9 @@ end
 function MainFrame:Hide()
   if frame then
     frame:Hide()
-    stopUpdateTimer() -- Stop updates when hiding
-    -- PERFORMANCE OPTIMIZATION: Reset display cache when hiding frame
-    self:ResetDisplayCache()
-    PushMaster:DebugPrint("MainFrame hidden")
+    stopUpdateTimer()
+    -- Clear cache when hiding to free memory
+    self:ClearCache()
   end
 end
 
