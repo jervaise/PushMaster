@@ -8,6 +8,10 @@ reference-addons/
 # Development documentation
 docs/DEVELOPMENT_GUIDE.md
 
+# Testing environment (out-of-game testing)
+test/
+/test/
+
 # Python cache files
 __pycache__/
 *.py[cod]

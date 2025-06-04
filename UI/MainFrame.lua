@@ -388,8 +388,12 @@ end
 ---@param confidence number Confidence percentage (0-100)
 ---@return string formattedText Colored and formatted time delta
 local function formatTimeDelta(timeDelta, confidence)
-  if timeDelta == nil or confidence == nil or confidence < 30 then
-    return "" -- Don't show if no data or low confidence
+  if timeDelta == nil or confidence == nil then
+    return "" -- Don't show if no data
+  end
+
+  if confidence < 30 then
+    return "" -- Don't show if low confidence
   end
 
   -- STABILITY: Apply smoothing to prevent rapid fluctuations
@@ -463,7 +467,7 @@ function MainFrame:UpdateDisplay(comparisonData)
       comparisonData.timeDelta, comparisonData.timeDelta / 60))
   end
 
-  if comparisonData.progress and comparisonData.progress.trash > 100 then
+  if comparisonData.progress and comparisonData.progress.trash and comparisonData.progress.trash > 100 then
     PushMaster:DebugPrint(string.format("ISSUE: Current trash progress %.1f%% exceeds 100%%",
       comparisonData.progress.trash))
   end
@@ -582,7 +586,7 @@ function MainFrame:Show()
 
   -- Clear cache when showing to ensure fresh data
   self:ClearCache()
-  resetDisplayCache() -- STABILITY: Reset display smoothing when showing
+  self:ResetDisplayCache() -- STABILITY: Reset display smoothing when showing
 
   if frame then
     frame:Show()
@@ -598,7 +602,7 @@ function MainFrame:Hide()
     stopUpdateTimer()
     -- Clear cache when hiding to free memory
     self:ClearCache()
-    resetDisplayCache() -- STABILITY: Reset display smoothing when hiding
+    self:ResetDisplayCache() -- STABILITY: Reset display smoothing when hiding
   end
 
   -- Time delta frame automatically hides with parent frame
