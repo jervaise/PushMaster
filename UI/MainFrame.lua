@@ -41,12 +41,16 @@ local elements = {
   displayText = nil,
   iconTextures = {},
   keystoneHeader = nil, -- NEW: Header for keystone info
-  timeDelta = nil       -- NEW: Time delta display above the frame
+  timeDelta = nil       -- NEW: Time delta display in separate frame
 }
+
+-- Time delta frame
+local timeDeltaFrame = nil
 
 -- Frame settings
 local FRAME_WIDTH = 250        -- Reduced to better balance margins
 local FRAME_HEIGHT = 50        -- Increased from 30 to accommodate header
+local TIME_DELTA_HEIGHT = 30   -- Height for time delta frame
 local HEADER_HEIGHT = 18       -- Height for the keystone header
 local MAIN_CONTENT_HEIGHT = 30 -- Height for the main content area
 local FRAME_PADDING = 8
@@ -139,6 +143,40 @@ local function createIconTexture(parent, iconPath, size)
   return texture
 end
 
+---Create the time delta frame
+local function createTimeDeltaFrame()
+  -- Create time delta frame as child of main frame with border and BackdropTemplate
+  timeDeltaFrame = CreateFrame("Frame", "PushMasterTimeDeltaFrame", frame, "BackdropTemplate")
+  timeDeltaFrame:SetSize(FRAME_WIDTH, TIME_DELTA_HEIGHT)
+  timeDeltaFrame:SetPoint("BOTTOM", frame, "TOP", 0, 5) -- Attach to top of main frame
+
+  -- Set backdrop identical to main frame
+  timeDeltaFrame:SetBackdrop({
+    bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+  })
+  timeDeltaFrame:SetBackdropColor(0, 0, 0, 0.8)
+  timeDeltaFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1) -- Default border color
+
+  -- No drag functionality - frame moves with parent
+
+  -- Create time delta text
+  elements.timeDelta = timeDeltaFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  elements.timeDelta:SetPoint("CENTER", timeDeltaFrame, "CENTER", 0, 0)
+  elements.timeDelta:SetJustifyH("CENTER")
+  elements.timeDelta:SetText("") -- Initially empty
+
+  -- Initially hide the frame
+  timeDeltaFrame:Hide()
+
+  PushMaster:DebugPrint("Time delta frame created as child of main frame with matching border")
+  return timeDeltaFrame
+end
+
 ---Create the main frame
 local function createMainFrame()
   -- Get the player's class color
@@ -170,11 +208,8 @@ local function createMainFrame()
   elements.keystoneHeader:SetTextColor(classColor.r, classColor.g, classColor.b, 1) -- Use class color
   elements.keystoneHeader:SetText("Keystone Info")
 
-  -- Create time delta display above the frame
-  elements.timeDelta = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  elements.timeDelta:SetPoint("BOTTOM", frame, "TOP", 0, 5)
-  elements.timeDelta:SetJustifyH("CENTER")
-  elements.timeDelta:SetText("") -- Initially empty
+  -- Create time delta frame separately
+  createTimeDeltaFrame()
 
   -- Make frame movable
   frame:SetMovable(true)
@@ -346,10 +381,10 @@ end
 ---Format time delta with confidence interval
 ---@param timeDelta number Time difference in seconds (positive = behind, negative = ahead)
 ---@param confidence number Confidence percentage (0-100)
----@return string formattedText Colored and formatted time delta with confidence
+---@return string formattedText Colored and formatted time delta
 local function formatTimeDelta(timeDelta, confidence)
-  if timeDelta == nil or confidence == nil or confidence <= 50 then
-    return "" -- Don't show if no data or low confidence (50% or below)
+  if timeDelta == nil or confidence == nil or confidence < 30 then
+    return "" -- Don't show if no data or low confidence
   end
 
   local color
@@ -376,13 +411,8 @@ local function formatTimeDelta(timeDelta, confidence)
     timeText = string.format("%ds", math.floor(absTime))
   end
 
-  -- Add confidence indicator
-  local confidenceText = ""
-  if confidence < 70 then
-    confidenceText = " (~" .. math.floor(confidence) .. "%)"
-  end
-
-  return color .. sign .. timeText .. confidenceText .. COLORS.RESET
+  -- No confidence indicator shown
+  return color .. sign .. timeText .. COLORS.RESET
 end
 
 ---Update the display with current comparison data
@@ -427,6 +457,12 @@ function MainFrame:UpdateDisplay(comparisonData)
   -- Only update border color if it changed
   if performanceStatus ~= lastDisplayValues.borderColor then
     frame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+
+    -- Apply same border color to time delta frame if it exists
+    if timeDeltaFrame then
+      timeDeltaFrame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+    end
+
     lastDisplayValues.borderColor = performanceStatus
   end
 
@@ -457,11 +493,20 @@ function MainFrame:UpdateDisplay(comparisonData)
     lastDisplayValues.keystoneHeader = keystoneText
   end
 
-  -- Update time delta display only if changed
+  -- Update time delta display and frame visibility
   local timeDeltaText = formatTimeDelta(comparisonData.timeDelta, comparisonData.timeConfidence)
   if timeDeltaText ~= lastDisplayValues.timeDelta then
     elements.timeDelta:SetText(timeDeltaText)
     lastDisplayValues.timeDelta = timeDeltaText
+
+    -- Show/hide time delta frame based on whether we have data to display
+    if timeDeltaFrame then
+      if timeDeltaText ~= "" then
+        timeDeltaFrame:Show()
+      else
+        timeDeltaFrame:Hide()
+      end
+    end
   end
 end
 
@@ -505,6 +550,7 @@ function MainFrame:Show()
 
   if frame then
     frame:Show()
+    -- Time delta frame will automatically show/hide with parent frame based on data availability
     startUpdateTimer()
   end
 end
@@ -517,6 +563,8 @@ function MainFrame:Hide()
     -- Clear cache when hiding to free memory
     self:ClearCache()
   end
+
+  -- Time delta frame automatically hides with parent frame
 end
 
 ---Check if the main frame is shown
@@ -529,6 +577,12 @@ end
 ---@return Frame|nil frame The main frame object or nil if not initialized
 function MainFrame:GetFrame()
   return frame
+end
+
+---Get the time delta frame object
+---@return Frame|nil timeDeltaFrame The time delta frame object or nil if not initialized
+function MainFrame:GetTimeDeltaFrame()
+  return timeDeltaFrame
 end
 
 ---Toggle the main frame visibility
@@ -562,15 +616,17 @@ end
 
 ---Load saved frame position
 local function loadFramePosition()
-  if not frame or not PushMasterDB or not PushMasterDB.settings or not PushMasterDB.settings.framePosition then
+  if not frame or not PushMasterDB or not PushMasterDB.settings then
     return
   end
 
-  local pos = PushMasterDB.settings.framePosition
-  frame:ClearAllPoints()
-  frame:SetPoint(pos.point or "CENTER", UIParent, pos.relativePoint or "CENTER", pos.x or 0, pos.y or 200)
-
-  PushMaster:DebugPrint("MainFrame position loaded from saved settings")
+  -- Load main frame position
+  if PushMasterDB.settings.framePosition then
+    local pos = PushMasterDB.settings.framePosition
+    frame:ClearAllPoints()
+    frame:SetPoint(pos.point or "CENTER", UIParent, pos.relativePoint or "CENTER", pos.x or 0, pos.y or 200)
+    PushMaster:DebugPrint("MainFrame position loaded from saved settings")
+  end
 end
 
 ---Setup event handlers for the frame

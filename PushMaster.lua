@@ -10,8 +10,8 @@ PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "A
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "0.9.4"
-PushMaster.author = "Loading..."
+PushMaster.version = "0.9.5"
+PushMaster.author = "Jervaise"
 
 -- Debug mode flag
 local debugMode = true
@@ -63,34 +63,32 @@ local function onAddonLoaded(loadedAddonName)
 
   -- Initialize saved variables with defaults
   local function initializeSavedVariables()
-    -- Set up default saved variables structure
-    local defaults = {
-      profile = {
-        version = "0.9.4", -- Use hardcoded version for initial setup
-        ui = {
-          mainFrame = {
-            position = { point = "CENTER", x = 0, y = 0 },
-            scale = 1.0,
-            alpha = 1.0,
-            locked = false,
-            theme = "default"
-          },
-          minimap = {
-            hide = false,
-            minimapPos = 220
-          }
-        },
-        settings = {
-          enableDebug = false,
-          enableTestMode = false,
-          autoHide = true,
-          updateFrequency = 1.0
-        },
-        data = {
-          bestTimes = {},
-          statistics = {}
-        }
-      }
+    -- Default settings structure
+    local defaultSettings = {
+      enabled = true,
+      debug = false,
+      frameScale = 1.0,
+      frameAlpha = 1.0,
+      showMainFrame = true,
+      showBestTimes = true,
+      showCurrentRun = true,
+      showProgress = true,
+      chatAnnouncements = true,
+      soundAlerts = false,
+      screenFlash = false,
+      trackAllRuns = true,
+      saveIncompleteRuns = false,
+      autoReset = true,
+      minimap = {
+        hide = false,
+        minimapPos = 220,
+        lock = false
+      },
+      -- Metadata for debugging and support
+      version = "0.9.5", -- Use hardcoded version for initial setup
+      author = "Jervaise",
+      lastLogin = nil,
+      installDate = nil
     }
 
     -- Initialize PushMasterDB if it doesn't exist
@@ -100,13 +98,13 @@ local function onAddonLoaded(loadedAddonName)
 
     -- Simple merge without AceDB-3.0 (which was causing the error)
     if not PushMasterDB.version then
-      PushMasterDB.version = defaults.profile.version
+      PushMasterDB.version = defaultSettings.version
     end
 
     if not PushMasterDB.settings then
       PushMasterDB.settings = {}
       -- Copy default settings
-      for k, v in pairs(defaults.profile.settings) do
+      for k, v in pairs(defaultSettings) do
         PushMasterDB.settings[k] = v
       end
     end
@@ -114,7 +112,7 @@ local function onAddonLoaded(loadedAddonName)
     if not PushMasterDB.minimap then
       PushMasterDB.minimap = {}
       -- Copy default minimap settings
-      for k, v in pairs(defaults.profile.ui.minimap) do
+      for k, v in pairs(defaultSettings.minimap) do
         PushMasterDB.minimap[k] = v
       end
     end
@@ -154,12 +152,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.9.4"
+      PushMaster.version = "0.9.5"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.4"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.5"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC

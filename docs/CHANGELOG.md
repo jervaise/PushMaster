@@ -5,6 +5,29 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2024-12-21
+
+### Removed
+- **Data Statistics Button**: Completely removed the data statistics button and its associated functionality
+  - Removed `ShowDataStatistics` function from SettingsFrame
+  - Cleaned up all references to data statistics display
+  - Simplified settings interface by removing unused feature
+
+### Changed
+- **Font System**: Implemented custom Expressway font throughout the addon interface
+  - All text elements now use Expressway font from `Media/Fonts/Expressway.ttf`
+  - Consistent font sizing across all UI elements (10pt-16pt range)
+  - Enhanced visual consistency with custom typography
+- **UI Text Updates**: Modified info title text styling
+  - Removed "PushMaster" prefix from subtitle, now displays "Real-time M+ Delta Analyzer"
+  - Changed subtitle color to gold for better visual hierarchy
+  - Improved text contrast and readability
+
+### Technical
+- **Font Implementation**: Added centralized `ADDON_FONT` constant for consistent font usage
+- **Code Cleanup**: Removed unused font table and simplified font management
+- **UI Optimization**: Streamlined text element creation with custom font application
+
 ## [0.9.4] - 2024-12-20
 
 ### Added

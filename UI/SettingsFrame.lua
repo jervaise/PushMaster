@@ -20,6 +20,9 @@ local isInitialized = false
 -- UI elements storage
 local elements = {}
 
+-- Addon font - use Expressway from media fonts
+local ADDON_FONT = "Interface\\AddOns\\PushMaster\\Media\\Fonts\\Expressway.ttf"
+
 -- Get player's class color for consistent theming
 local function getClassColor()
   local playerClass = select(2, UnitClass("player"))
@@ -64,7 +67,8 @@ local function createCheckbox(parent, name, labelText, tooltip)
   checkbox:SetSize(24, 24)
 
   -- Create custom label text (positioned to the right of checkbox)
-  checkbox.labelText = checkbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  checkbox.labelText = checkbox:CreateFontString(nil, "OVERLAY")
+  checkbox.labelText:SetFont(ADDON_FONT, 11)
   checkbox.labelText:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
   checkbox.labelText:SetText(labelText)
   checkbox.labelText:SetTextColor(0.9, 0.9, 0.9)
@@ -105,7 +109,8 @@ local function createSlider(parent, name, labelText, minVal, maxVal, step)
   _G[name .. "Text"]:SetText(labelText)
 
   -- Value text
-  slider.valueText = slider:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  slider.valueText = slider:CreateFontString(nil, "OVERLAY")
+  slider.valueText:SetFont(ADDON_FONT, 10)
   slider.valueText:SetPoint("TOP", slider, "BOTTOM", 0, -5)
   slider.valueText:SetTextColor(1, 1, 1)
 
@@ -158,7 +163,8 @@ local function createSettingsFrame()
   titleBar:SetPoint("TOP", frame, "TOP", 0, -4)
 
   -- Title text
-  local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  local title = titleBar:CreateFontString(nil, "OVERLAY")
+  title:SetFont(ADDON_FONT, 16, "OUTLINE")
   title:SetPoint("CENTER", titleBar, "CENTER", 0, 0)
   title:SetText("PushMaster")
   title:SetTextColor(classColor.r, classColor.g, classColor.b)
@@ -177,13 +183,15 @@ local function createSettingsFrame()
   infoArea:SetPoint("TOP", titleBar, "BOTTOM", 0, -10)
 
   -- Info title
-  local infoTitle = infoArea:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  local infoTitle = infoArea:CreateFontString(nil, "OVERLAY")
+  infoTitle:SetFont(ADDON_FONT, 14, "OUTLINE")
   infoTitle:SetPoint("TOP", infoArea, "TOP", 0, 0)
-  infoTitle:SetText("PushMaster: Real-time M+ Delta Analyzer")
-  infoTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
+  infoTitle:SetText("Real-time M+ Delta Analyzer")
+  infoTitle:SetTextColor(1, 0.82, 0) -- Gold color
 
   -- Info description
-  local infoDesc = infoArea:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  local infoDesc = infoArea:CreateFontString(nil, "OVERLAY")
+  infoDesc:SetFont(ADDON_FONT, 11)
   infoDesc:SetPoint("TOP", infoTitle, "BOTTOM", 0, -10)
   infoDesc:SetWidth(500)
   infoDesc:SetJustifyH("CENTER")
@@ -211,13 +219,15 @@ local function createSettingsFrame()
   leftBox:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.8)
 
   -- Configuration title (centered like Test Mode)
-  local configTitle = leftBox:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  local configTitle = leftBox:CreateFontString(nil, "OVERLAY")
+  configTitle:SetFont(ADDON_FONT, 14, "OUTLINE")
   configTitle:SetPoint("TOP", leftBox, "TOP", 0, -20)
   configTitle:SetText("Configuration")
   configTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Configuration description (like Test Mode)
-  local configDesc = leftBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  local configDesc = leftBox:CreateFontString(nil, "OVERLAY")
+  configDesc:SetFont(ADDON_FONT, 10)
   configDesc:SetPoint("TOP", configTitle, "BOTTOM", 0, -10)
   configDesc:SetWidth(220)
   configDesc:SetJustifyH("CENTER")
@@ -243,7 +253,8 @@ local function createSettingsFrame()
   elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -10)
 
   -- Frame Scale section (more space above it)
-  local scaleLabel = leftBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  local scaleLabel = leftBox:CreateFontString(nil, "OVERLAY")
+  scaleLabel:SetFont(ADDON_FONT, 10)
   scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -140)
   scaleLabel:SetText("Frame Scale:")
   scaleLabel:SetTextColor(1, 1, 1)
@@ -257,7 +268,8 @@ local function createSettingsFrame()
   elements.scaleSlider:SetObeyStepOnDrag(true)
 
   -- Scale slider value text (centered)
-  local scaleText = elements.scaleSlider:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  local scaleText = elements.scaleSlider:CreateFontString(nil, "OVERLAY")
+  scaleText:SetFont(ADDON_FONT, 10)
   scaleText:SetPoint("TOP", elements.scaleSlider, "BOTTOM", 0, -5)
   scaleText:SetText("100%")
   scaleText:SetTextColor(1, 1, 1)
@@ -284,13 +296,15 @@ local function createSettingsFrame()
   rightBox:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.8)
 
   -- Test mode section title
-  local testTitle = rightBox:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  local testTitle = rightBox:CreateFontString(nil, "OVERLAY")
+  testTitle:SetFont(ADDON_FONT, 14, "OUTLINE")
   testTitle:SetPoint("TOP", rightBox, "TOP", 0, -20)
   testTitle:SetText("Test Mode")
   testTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Test mode description
-  local testDesc = rightBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  local testDesc = rightBox:CreateFontString(nil, "OVERLAY")
+  testDesc:SetFont(ADDON_FONT, 10)
   testDesc:SetPoint("TOP", testTitle, "BOTTOM", 0, -10)
   testDesc:SetWidth(220)
   testDesc:SetJustifyH("CENTER")
@@ -327,12 +341,6 @@ local function createSettingsFrame()
   elements.clearDataButton:SetPoint("TOP", elements.resetPosButton, "BOTTOM", 0, -15)
   elements.clearDataButton:SetText("Clear Best Times")
 
-  -- SAVED VARIABLES OPTIMIZATION: Add stats button (removed cleanup button)
-  elements.statsButton = CreateFrame("Button", "PushMasterStatsButton", rightBox, "UIPanelButtonTemplate")
-  elements.statsButton:SetSize(140, 30)
-  elements.statsButton:SetPoint("TOP", elements.clearDataButton, "BOTTOM", 0, -15)
-  elements.statsButton:SetText("Data Statistics")
-
   -- === FOOTER WITH VERSION INFO ===
 
   -- Create footer frame
@@ -340,10 +348,11 @@ local function createSettingsFrame()
   footerFrame:SetSize(frame:GetWidth(), 65)
   footerFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
-  -- Version and author info centered with class color
-  local versionText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  -- Version and author info centered with gold color
+  local versionText = footerFrame:CreateFontString(nil, "OVERLAY")
+  versionText:SetFont(ADDON_FONT, 11)
   versionText:SetPoint("CENTER", footerFrame, "CENTER", 0, 0)
-  versionText:SetTextColor(classColor.r, classColor.g, classColor.b)
+  versionText:SetTextColor(1, 0.82, 0) -- Gold color
 
   -- Store reference for dynamic updates
   elements.versionText = versionText
@@ -382,7 +391,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.4"   -- Fallback version
+    local version = "0.9.5"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -412,7 +421,8 @@ local function loadSettings()
       end
     end
 
-    elements.versionText:SetText("PushMaster v" .. version .. " by " .. author)
+    elements.versionText:SetText("by " .. author .. " - v" .. version)
+    PushMaster:DebugPrint("Footer refreshed: v" .. version .. " by " .. author)
   end
 
   PushMaster:DebugPrint("Settings loaded into UI")
@@ -507,11 +517,6 @@ local function setupEventHandlers()
   -- Clear data button
   elements.clearDataButton:SetScript("OnClick", function()
     StaticPopup_Show("PUSHMASTER_RESET_CONFIRM")
-  end)
-
-  -- Stats button
-  elements.statsButton:SetScript("OnClick", function()
-    SettingsFrame:ShowDataStatistics()
   end)
 
   PushMaster:DebugPrint("Event handlers setup")
@@ -643,7 +648,8 @@ function SettingsFrame:ShowExportDialog()
   exportFrame:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.8)
 
   -- Title
-  local title = exportFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  local title = exportFrame:CreateFontString(nil, "OVERLAY")
+  title:SetFont(ADDON_FONT, 14, "OUTLINE")
   title:SetPoint("TOP", exportFrame, "TOP", 0, -15)
   title:SetText("Export PushMaster Data")
   title:SetTextColor(classColor.r, classColor.g, classColor.b)
@@ -701,7 +707,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.4"   -- Fallback version
+    local version = "0.9.5"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -731,128 +737,7 @@ function SettingsFrame:RefreshFooter()
       end
     end
 
-    elements.versionText:SetText("PushMaster v" .. version .. " by " .. author)
+    elements.versionText:SetText("by " .. author .. " - v" .. version)
     PushMaster:DebugPrint("Footer refreshed: v" .. version .. " by " .. author)
   end
-end
-
----Show data statistics dialog
-function SettingsFrame:ShowDataStatistics()
-  if not PushMaster.Data.Calculator then
-    PushMaster:Print("Calculator module not available.")
-    return
-  end
-
-  -- Get the player's class color
-  local classColor = getClassColor()
-
-  -- Get statistics from Calculator
-  local stats = PushMaster.Data.Calculator:GetSavedVariablesStats()
-  local settings = PushMaster.Data.Calculator:GetOptimizationSettings()
-
-  -- Create statistics frame
-  local statsFrame = CreateFrame("Frame", "PushMasterStatsFrame", UIParent, "BackdropTemplate")
-  statsFrame:SetSize(450, 350)
-  statsFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-  statsFrame:SetFrameStrata("DIALOG")
-  statsFrame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true,
-    tileSize = 32,
-    edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 }
-  })
-  statsFrame:SetBackdropColor(0, 0, 0, 1)
-
-  -- Title
-  local title = statsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOP", statsFrame, "TOP", 0, -20)
-  title:SetText("Saved Variables Statistics")
-  title:SetTextColor(classColor.r, classColor.g, classColor.b)
-
-  -- Create scrollable content area
-  local scrollFrame = CreateFrame("ScrollFrame", nil, statsFrame, "UIPanelScrollFrameTemplate")
-  scrollFrame:SetPoint("TOPLEFT", statsFrame, "TOPLEFT", 20, -50)
-  scrollFrame:SetPoint("BOTTOMRIGHT", statsFrame, "BOTTOMRIGHT", -40, 50)
-
-  local contentFrame = CreateFrame("Frame", nil, scrollFrame)
-  contentFrame:SetSize(380, 400)
-  scrollFrame:SetScrollChild(contentFrame)
-
-  -- Statistics content
-  local yOffset = -10
-  local lineHeight = 20
-
-  local function addStatLine(label, value, color)
-    local line = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    line:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 10, yOffset)
-    line:SetText(label .. ": " .. tostring(value))
-    if color then
-      line:SetTextColor(color.r, color.g, color.b)
-    else
-      line:SetTextColor(0.9, 0.9, 0.9)
-    end
-    yOffset = yOffset - lineHeight
-    return line
-  end
-
-  -- File size information
-  addStatLine("=== STORAGE USAGE ===", "", { r = 1, g = 0.82, b = 0 })
-  addStatLine("Total Data Size", string.format("%.1f KB", stats.totalSize / 1024), { r = 0.8, g = 1, b = 0.8 })
-  addStatLine("Dungeon Count", stats.dungeonCount)
-  addStatLine("Key Level Variants", stats.levelCount)
-  addStatLine("Total Best Time Entries", stats.totalEntries)
-
-  yOffset = yOffset - 10
-  addStatLine("=== DATA BREAKDOWN ===", "", { r = 1, g = 0.82, b = 0 })
-  addStatLine("Average Trash Samples per Entry", string.format("%.1f", stats.averageTrashSamples))
-  addStatLine("Average Boss Kills per Entry", string.format("%.1f", stats.averageBossKills))
-  addStatLine("Total Trash Samples Stored", stats.totalTrashSamples)
-  addStatLine("Total Boss Kill Records", stats.totalBossKills)
-
-  yOffset = yOffset - 10
-  addStatLine("=== OPTIMIZATION SETTINGS ===", "", { r = 1, g = 0.82, b = 0 })
-  addStatLine("Max Trash Samples per Entry", settings.maxTrashSamples, { r = 0.8, g = 0.8, b = 1 })
-  addStatLine("Max Boss Records per Entry", settings.maxBossKillTimes, { r = 0.8, g = 0.8, b = 1 })
-  addStatLine("Data Retention (days)", settings.maxOldDataDays, { r = 0.8, g = 0.8, b = 1 })
-  addStatLine("Compression Enabled", settings.compressionEnabled and "Yes" or "No",
-    settings.compressionEnabled and { r = 0.8, g = 1, b = 0.8 } or { r = 1, g = 0.8, b = 0.8 })
-
-  yOffset = yOffset - 10
-  addStatLine("=== RECOMMENDATIONS ===", "", { r = 1, g = 0.82, b = 0 })
-
-  -- Provide recommendations based on data size
-  if stats.totalSize > 100000 then -- > 100KB
-    addStatLine("• Large dataset - automatic cleanup on restart", "", { r = 1, g = 1, b = 0.8 })
-  end
-
-  if stats.averageTrashSamples > settings.maxTrashSamples then
-    addStatLine("• Trash samples will be compressed automatically", "", { r = 1, g = 1, b = 0.8 })
-  end
-
-  if stats.totalEntries > 50 then
-    addStatLine("• Large dataset - automatic optimization active", "", { r = 1, g = 1, b = 0.8 })
-  else
-    addStatLine("• Data size is optimal", "", { r = 0.8, g = 1, b = 0.8 })
-  end
-
-  -- Buttons
-  local closeButton = CreateFrame("Button", nil, statsFrame, "UIPanelCloseButton")
-  closeButton:SetPoint("TOPRIGHT", statsFrame, "TOPRIGHT", -3, -3)
-  closeButton:SetScript("OnClick", function()
-    statsFrame:Hide()
-  end)
-
-  local refreshButton = CreateFrame("Button", nil, statsFrame, "UIPanelButtonTemplate")
-  refreshButton:SetSize(80, 25)
-  refreshButton:SetPoint("BOTTOM", statsFrame, "BOTTOM", 0, 15)
-  refreshButton:SetText("Refresh")
-  refreshButton:SetScript("OnClick", function()
-    statsFrame:Hide()
-    SettingsFrame:ShowDataStatistics() -- Reopen with fresh data
-  end)
-
-  statsFrame:Show()
-  PushMaster:DebugPrint("Data statistics dialog shown")
 end
