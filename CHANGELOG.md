@@ -5,6 +5,18 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-01-04
+
+### Fixed
+- **UI Function Call Error**: Fixed `resetDisplayCache()` function call error in MainFrame.lua
+- **Method Reference Bug**: Corrected global function calls to proper `self:ResetDisplayCache()` method calls
+- **Display Cache Reset**: Ensured display cache properly resets when showing/hiding main frame
+
+### Technical Improvements
+- **Error Handling**: Improved error handling for UI method calls
+- **Code Consistency**: Fixed method call patterns throughout UI code
+- **Stability**: Enhanced UI stability when toggling frame visibility
+
 ## [1.0.0] - 2024-12-19
 
 ### 🚀 Major Release - Enhanced AI Algorithm
