@@ -2345,7 +2345,25 @@ function Calculator:CalculateTimeDeltaUsingMethod(method, currentRun, bestTime, 
       end
     end
   else -- proportional_estimate
-    local estimatedProgress = math.max(currentTrash / 100, currentBosses / 4)
+    -- Make proportional estimate less aggressive
+    local trashProgress = currentTrash / 100
+    local bossProgress = currentBosses / 4 -- Assume 4 bosses max
+
+    -- Weight trash progress more heavily early in run, boss progress more heavily later
+    local progressRatio = elapsedTime / bestTime.time
+    local trashWeight = 1.0 - math.min(0.7, progressRatio) -- Start at 100%, drop to 30% by end
+    local bossWeight = math.min(0.7, progressRatio)        -- Start at 0%, rise to 70% by end
+
+    -- Combine with weights and add safety margin to prevent over-aggressive estimates
+    local estimatedProgress = (trashProgress * trashWeight + bossProgress * bossWeight) / (trashWeight + bossWeight)
+
+    -- Add safety margin to prevent extreme predictions early in run
+    if progressRatio < 0.3 then                    -- Early in run
+      estimatedProgress = estimatedProgress + 0.1  -- Add 10% safety margin
+    elseif progressRatio < 0.6 then                -- Mid run
+      estimatedProgress = estimatedProgress + 0.05 -- Add 5% safety margin
+    end
+
     estimatedProgress = math.min(estimatedProgress, 0.95)
     bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
     confidence = 30
@@ -2417,9 +2435,18 @@ function Calculator:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
   for _, method in ipairs(methods) do
     local timeDelta, confidence = self:CalculateTimeDeltaUsingMethod(method, currentRun, bestTime, elapsedTime)
     if timeDelta and confidence > 20 then -- Only use reasonable confidence methods
+      -- Cap extreme time deltas to prevent one method from dominating
+      local cappedTimeDelta = timeDelta
+      if math.abs(timeDelta) > 600 then     -- Cap at 10 minutes
+        cappedTimeDelta = timeDelta > 0 and 600 or -600
+        confidence = confidence * 0.5       -- Reduce confidence for capped values
+      elseif math.abs(timeDelta) > 300 then -- Reduce confidence for 5+ minute deltas
+        confidence = confidence * 0.8
+      end
+
       local weight = confidence / 100
       table.insert(results, {
-        timeDelta = timeDelta,
+        timeDelta = cappedTimeDelta,
         weight = weight,
         method = method
       })
@@ -2452,6 +2479,16 @@ function Calculator:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
     agreementBonus = 8
   else
     agreementBonus = 2
+  end
+
+  -- Dampen confidence bonus for extreme time deltas
+  local absWeightedDelta = math.abs(weightedTimeDelta)
+  if absWeightedDelta > 300 then     -- Very large time delta (5+ minutes)
+    agreementBonus = agreementBonus * 0.3
+  elseif absWeightedDelta > 180 then -- Large time delta (3+ minutes)
+    agreementBonus = agreementBonus * 0.6
+  elseif absWeightedDelta > 120 then -- Moderate time delta (2+ minutes)
+    agreementBonus = agreementBonus * 0.8
   end
 
   return {
