@@ -10,7 +10,7 @@ PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "A
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "0.9.5"
+PushMaster.version = "0.9.6"
 PushMaster.author = "Jervaise"
 
 -- Debug mode flag
@@ -85,7 +85,7 @@ local function onAddonLoaded(loadedAddonName)
         lock = false
       },
       -- Metadata for debugging and support
-      version = "0.9.5", -- Use hardcoded version for initial setup
+      version = "0.9.6", -- Use hardcoded version for initial setup
       author = "Jervaise",
       lastLogin = nil,
       installDate = nil
@@ -152,12 +152,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.9.5"
+      PushMaster.version = "0.9.6"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.5"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.6"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC

@@ -56,28 +56,28 @@ local SAMPLE_RUN_DATA = {
     testProgression = {
       -- SLOW START - best run ahead
       { time = 0,    trash = 0,   bosses = 0, deaths = 0, milestone = true, message = "Dungeon started - cautious approach" },
-      { time = 180,  trash = 6,   bosses = 0, deaths = 0, milestone = true, message = "Slow start - best run pulling ahead!" },
-      { time = 300,  trash = 12,  bosses = 0, deaths = 0, milestone = true, message = "Still no boss - best run dominating trash!" },
+      { time = 180,  trash = 6,   bosses = 0, deaths = 1, milestone = true, message = "Early death on trash - best run dominating!" },
+      { time = 300,  trash = 12,  bosses = 0, deaths = 1, milestone = true, message = "Still no boss - best run dominating trash!" },
 
       -- VERY LATE FIRST BOSS - way behind
-      { time = 480,  trash = 18,  bosses = 1, deaths = 0, milestone = true, message = "Captain Dailcry finally down - 2 minutes behind best!" },
-      { time = 600,  trash = 22,  bosses = 1, deaths = 0, milestone = true, message = "Best run has massive lead in both trash and bosses" },
+      { time = 480,  trash = 18,  bosses = 1, deaths = 1, milestone = true, message = "Captain Dailcry finally down - 2 minutes behind best!" },
+      { time = 600,  trash = 22,  bosses = 1, deaths = 2, milestone = true, message = "Second death! Best run has massive lead in both trash and bosses" },
 
-      -- DEATH MAKES IT WORSE
-      { time = 720,  trash = 25,  bosses = 1, deaths = 1, milestone = true, message = "Death on trash - best run extending lead!" },
-      { time = 840,  trash = 30,  bosses = 1, deaths = 1, milestone = true, message = "Best run already has Baron down - we're struggling!" },
+      -- MORE DEATHS MAKE IT WORSE
+      { time = 720,  trash = 25,  bosses = 1, deaths = 3, milestone = true, message = "Third death on trash - best run extending lead!" },
+      { time = 840,  trash = 30,  bosses = 1, deaths = 3, milestone = true, message = "Best run already has Baron down - we're struggling!" },
 
-      -- LATE SECOND BOSS
-      { time = 960,  trash = 38,  bosses = 2, deaths = 1, milestone = true, message = "Baron Braunpyke down slow - best run way ahead on everything" },
+      -- LATE SECOND BOSS WITH DEATH
+      { time = 960,  trash = 38,  bosses = 2, deaths = 4, milestone = true, message = "Baron Braunpyke down slow - fourth death! Best run way ahead" },
 
-      -- RECOVERY PHASE - starting to catch up
-      { time = 1080, trash = 52,  bosses = 2, deaths = 1, milestone = true, message = "Fast trash recovery! Closing gap slightly" },
-      { time = 1200, trash = 68,  bosses = 2, deaths = 1, milestone = true, message = "Racing to final boss - finally matching best pace" },
+      -- RECOVERY PHASE - but deaths hurt
+      { time = 1080, trash = 52,  bosses = 2, deaths = 4, milestone = true, message = "Fast trash recovery! But 4 deaths cost us time" },
+      { time = 1200, trash = 68,  bosses = 2, deaths = 5, milestone = true, message = "Fifth death! Racing to final boss - death penalty mounting" },
 
-      -- STRONG FINISH - but is it enough?
-      { time = 1320, trash = 82,  bosses = 2, deaths = 1, milestone = true, message = "Excellent trash pace - overtaking best run!" },
-      { time = 1440, trash = 95,  bosses = 3, deaths = 1, milestone = true, message = "Prioress Murrpray down! Racing to finish line!" },
-      { time = 1500, trash = 100, bosses = 3, deaths = 1, milestone = true, message = "Finished! Tied best run time despite slow start!" }
+      -- STRONG FINISH - but deaths cost the timer
+      { time = 1320, trash = 82,  bosses = 2, deaths = 5, milestone = true, message = "Excellent trash pace - but deaths still hurt!" },
+      { time = 1440, trash = 95,  bosses = 3, deaths = 6, milestone = true, message = "Prioress Murrpray down! Sixth death on boss!" },
+      { time = 1500, trash = 100, bosses = 3, deaths = 6, milestone = true, message = "Finished! Death penalty cost us the timer!" }
     }
   },
   {
@@ -112,24 +112,24 @@ local SAMPLE_RUN_DATA = {
       -- DECENT START - but best run is faster
       { time = 0,    trash = 0,   bosses = 0, deaths = 0, milestone = true, message = "Dungeon started - solid group" },
       { time = 180,  trash = 8,   bosses = 0, deaths = 0, milestone = true, message = "Good pace but best run is faster!" },
-      { time = 360,  trash = 15,  bosses = 0, deaths = 0, milestone = true, message = "Best run already has first boss - we're behind!" },
+      { time = 360,  trash = 15,  bosses = 0, deaths = 1, milestone = true, message = "Death before first boss - best run already ahead!" },
 
       -- SLOW BOSS KILL - falling further behind
-      { time = 480,  trash = 22,  bosses = 1, deaths = 0, milestone = true, message = "Challengers down slow - best run extending lead" },
-      { time = 600,  trash = 28,  bosses = 1, deaths = 0, milestone = true, message = "Struggling with trash - best run dominating" },
+      { time = 480,  trash = 22,  bosses = 1, deaths = 2, milestone = true, message = "Challengers down slow - second death on boss!" },
+      { time = 600,  trash = 28,  bosses = 1, deaths = 2, milestone = true, message = "Struggling with trash - best run dominating" },
 
-      -- DISASTER - death makes it worse
-      { time = 720,  trash = 32,  bosses = 1, deaths = 1, milestone = true, message = "Death! Best run has Gorechop - we're in trouble" },
-      { time = 900,  trash = 42,  bosses = 1, deaths = 1, milestone = true, message = "Still no second boss - best run way ahead" },
+      -- DISASTER - more deaths make it worse
+      { time = 720,  trash = 32,  bosses = 1, deaths = 3, milestone = true, message = "Third death! Best run has Gorechop - we're in trouble" },
+      { time = 900,  trash = 42,  bosses = 1, deaths = 4, milestone = true, message = "Fourth death! Still no second boss - best run way ahead" },
 
       -- VERY LATE SECOND BOSS
-      { time = 1080, trash = 50,  bosses = 2, deaths = 1, milestone = true, message = "Gorechop finally down - 6 minutes behind best!" },
-      { time = 1200, trash = 58,  bosses = 2, deaths = 1, milestone = true, message = "Best run almost finished - we can't catch up" },
+      { time = 1080, trash = 50,  bosses = 2, deaths = 5, milestone = true, message = "Gorechop finally down - fifth death! 6 minutes behind!" },
+      { time = 1200, trash = 58,  bosses = 2, deaths = 5, milestone = true, message = "Best run almost finished - we can't catch up" },
 
       -- TOO LITTLE TOO LATE
-      { time = 1320, trash = 68,  bosses = 3, deaths = 1, milestone = true, message = "Xav down but best run already finished!" },
-      { time = 1500, trash = 85,  bosses = 4, deaths = 1, milestone = true, message = "Kul'tharok down - but best run won by 1 minute!" },
-      { time = 1620, trash = 100, bosses = 4, deaths = 1, milestone = true, message = "Run complete - best run was simply better today" }
+      { time = 1320, trash = 68,  bosses = 3, deaths = 6, milestone = true, message = "Xav down but sixth death! Best run already finished!" },
+      { time = 1500, trash = 85,  bosses = 4, deaths = 7, milestone = true, message = "Kul'tharok down - seventh death! Best run won easily!" },
+      { time = 1620, trash = 100, bosses = 4, deaths = 7, milestone = true, message = "Run complete - death penalty was devastating" }
     }
   },
   {
@@ -161,22 +161,22 @@ local SAMPLE_RUN_DATA = {
       }
     },
     testProgression = {
-      -- FAST START - crushing best run
+      -- FAST START - crushing best run but with deaths
       { time = 0,    trash = 0,   bosses = 0, deaths = 0, milestone = true, message = "Dungeon started - experienced group!" },
-      { time = 180,  trash = 12,  bosses = 0, deaths = 0, milestone = true, message = "Lightning fast trash - destroying best run!" },
-      { time = 360,  trash = 25,  bosses = 1, deaths = 0, milestone = true, message = "Platinum Pummeler down early! 4 minutes ahead of best!" },
+      { time = 180,  trash = 12,  bosses = 0, deaths = 1, milestone = true, message = "Lightning fast trash but early death!" },
+      { time = 360,  trash = 25,  bosses = 1, deaths = 1, milestone = true, message = "Platinum Pummeler down early! 4 minutes ahead despite death!" },
 
-      -- MAINTAINING LEAD
-      { time = 540,  trash = 42,  bosses = 1, deaths = 0, milestone = true, message = "Excellent pace - best run can't keep up!" },
-      { time = 720,  trash = 58,  bosses = 2, deaths = 0, milestone = true, message = "Gnomercy down fast! Best run still on first boss!" },
+      -- MAINTAINING LEAD BUT DEATHS ACCUMULATE
+      { time = 540,  trash = 42,  bosses = 1, deaths = 2, milestone = true, message = "Second death but still excellent pace!" },
+      { time = 720,  trash = 58,  bosses = 2, deaths = 2, milestone = true, message = "Gnomercy down fast! Best run still on first boss!" },
 
-      -- DOMINATING
-      { time = 900,  trash = 72,  bosses = 2, deaths = 0, milestone = true, message = "Racing to third boss - best run 6 minutes behind!" },
-      { time = 1080, trash = 88,  bosses = 3, deaths = 0, milestone = true, message = "Machinist's Garden down! Almost at King Mechagon!" },
+      -- DOMINATING BUT DEATHS HURT
+      { time = 900,  trash = 72,  bosses = 2, deaths = 3, milestone = true, message = "Third death! Racing to third boss - best run 6 minutes behind!" },
+      { time = 1080, trash = 88,  bosses = 3, deaths = 4, milestone = true, message = "Machinist's Garden down! Fourth death but almost at King!" },
 
-      -- CRUSHING VICTORY
-      { time = 1200, trash = 100, bosses = 4, deaths = 0, milestone = true, message = "King Mechagon down! Finished 8 minutes ahead!" },
-      { time = 1200, trash = 100, bosses = 4, deaths = 0, milestone = true, message = "Absolute domination! Best run crushed!" }
+      -- VICTORY BUT DEATHS COST TIME
+      { time = 1200, trash = 100, bosses = 4, deaths = 5, milestone = true, message = "King Mechagon down! Fifth death but still 8 minutes ahead!" },
+      { time = 1200, trash = 100, bosses = 4, deaths = 5, milestone = true, message = "Victory! Deaths hurt but speed overcame penalty!" }
     }
   }
 }
@@ -223,11 +223,25 @@ function TestMode:setupFakeBestTime()
   local fakeBestTimes = {}
   fakeBestTimes[testRunData.mapID] = {}
 
+  -- Generate deathTimes array based on best run's death count
+  local deathTimes = {}
+  local bestRunDeaths = testRunData.bestRunData.deaths or 0
+  local bestRunTime = testRunData.bestRunData.time
+
+  if bestRunDeaths > 0 then
+    -- Distribute deaths evenly throughout the best run time for realistic comparison
+    local timeInterval = bestRunTime / (bestRunDeaths + 1)
+    for i = 1, bestRunDeaths do
+      table.insert(deathTimes, timeInterval * i)
+    end
+  end
+
   -- Build fake best-time entry directly using new trashSamples
   local fakeEntry = {
     time = testRunData.bestRunData.time,
     date = date("%Y-%m-%d %H:%M:%S"),
     deaths = testRunData.bestRunData.deaths,
+    deathTimes = deathTimes, -- Add the missing deathTimes array
     affixes = testRunData.affixes,
     bossKillTimes = testRunData.bestRunData.bossKillTimes,
     trashSamples = testRunData.bestRunData.trashSamples or {}
@@ -237,8 +251,9 @@ function TestMode:setupFakeBestTime()
   -- Import the fake best times into Calculator
   Calculator:ImportBestTimes(fakeBestTimes)
 
-  PushMaster:DebugPrint(string.format("Fake best time set up: %s +%d (%.1fs)",
-    testRunData.name, testRunData.keyLevel, testRunData.bestRunData.time))
+  PushMaster:DebugPrint(string.format("Fake best time set up: %s +%d (%.1fs) with %d deaths at times: %s",
+    testRunData.name, testRunData.keyLevel, testRunData.bestRunData.time,
+    bestRunDeaths, table.concat(deathTimes, "s, ") .. (bestRunDeaths > 0 and "s" or "")))
 end
 
 ---Update test display with real Calculator comparison data

@@ -205,7 +205,7 @@ local function createMainFrame()
   elements.keystoneHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   elements.keystoneHeader:SetPoint("TOP", frame, "TOP", 0, -8)
   elements.keystoneHeader:SetJustifyH("CENTER")
-  elements.keystoneHeader:SetTextColor(classColor.r, classColor.g, classColor.b, 1) -- Use class color
+  elements.keystoneHeader:SetTextColor(1, 1, 1, 1) -- Always white color
   elements.keystoneHeader:SetText("Keystone Info")
 
   -- Create time delta frame separately
@@ -562,6 +562,12 @@ function MainFrame:Hide()
     stopUpdateTimer()
     -- Clear cache when hiding to free memory
     self:ClearCache()
+  end
+
+  -- Stop test mode if it's running when main GUI is closed
+  if PushMaster.UI and PushMaster.UI.TestMode and PushMaster.UI.TestMode:IsActive() then
+    PushMaster.UI.TestMode:StopTest()
+    PushMaster:DebugPrint("Test mode stopped due to main GUI being closed")
   end
 
   -- Time delta frame automatically hides with parent frame

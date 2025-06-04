@@ -5,6 +5,25 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2024-12-21
+
+### Changed
+- **Test Mode Integration**: Test mode now automatically stops when the main GUI is closed
+  - Prevents test mode from continuing to run in the background after closing the UI
+  - Ensures clean state management and prevents potential resource leaks
+  - Improves user experience by linking test mode lifecycle to UI visibility
+
+### Fixed
+- **Dungeon Name Display**: Dungeon name text in the main frame is now always white
+  - Changed from class-based color to consistent white (1, 1, 1, 1) for better readability
+  - Provides uniform appearance regardless of player class
+  - Ensures consistent visual styling across all users
+
+### Technical
+- Added test mode cleanup logic to `MainFrame:Hide()` method
+- Modified keystone header text color in main frame creation
+- Enhanced UI state management for better resource handling
+
 ## [0.9.5] - 2024-12-21
 
 ### Removed

@@ -391,7 +391,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.5"   -- Fallback version
+    local version = "0.9.6"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -707,7 +707,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.5"   -- Fallback version
+    local version = "0.9.6"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
