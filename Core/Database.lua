@@ -141,6 +141,53 @@ function PushMaster.Core.Database:GetAllRuns(dungeonID, keyLevel)
   return {}
 end
 
+---Get the best timed run for extrapolation using priority system
+---@param dungeonID number The dungeon ID
+---@param targetKeyLevel number The target key level to extrapolate to
+---@param maxLevelGap number Maximum levels below to search (default: 5)
+---@return table|nil, number|nil bestRun, sourceKeyLevel The best timed run and its key level, or nil if none found
+function PushMaster.Core.Database:GetBestRunForExtrapolation(dungeonID, targetKeyLevel, maxLevelGap)
+  maxLevelGap = maxLevelGap or 5 -- Default maximum gap of 5 levels
+  local db = self:GetDB()
+
+  if not db.runs[dungeonID] then
+    return nil, nil
+  end
+
+  -- Priority system: Start with 1 level below, then 2, then 3, etc.
+  for levelGap = 1, maxLevelGap do
+    local sourceKeyLevel = targetKeyLevel - levelGap
+
+    -- Don't search below key level 2 (mythic+ starts at 2)
+    if sourceKeyLevel < 2 then
+      break
+    end
+
+    local levelData = db.runs[dungeonID][sourceKeyLevel]
+    if levelData and levelData.bestRun then
+      -- Check if the best run was timed (completed within time limit)
+      if self:_isRunTimed(levelData.bestRun) then
+        return levelData.bestRun, sourceKeyLevel
+      end
+    end
+  end
+
+  -- No suitable timed run found
+  return nil, nil
+end
+
+---Check if a run was timed (completed within the time limit)
+---@param runData table The run data to check
+---@return boolean true if the run was timed
+function PushMaster.Core.Database:_isRunTimed(runData)
+  if not runData or not runData.totalTime or not runData.timeLimit then
+    return false
+  end
+
+  -- A run is timed if it was completed within the time limit
+  return runData.totalTime <= runData.timeLimit
+end
+
 ---Update addon settings
 function PushMaster.Core.Database:UpdateSettings(settings)
   local db = self:GetDB()

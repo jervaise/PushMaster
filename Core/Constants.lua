@@ -47,6 +47,33 @@ PushMaster.Core.Constants.COLORS = {
   NO_DATA = { r = 0.5, g = 0.5, b = 0.5, a = 1 } -- Gray
 }
 
+-- Mythic+ Scaling Constants
+PushMaster.Core.Constants.MYTHIC_PLUS_SCALING = {
+  -- Known health/damage modifiers from Blizzard data
+  HEALTH_DAMAGE_MODIFIERS = {
+    [2] = 1.07,  -- +7%
+    [3] = 1.14,  -- +14%
+    [4] = 1.23,  -- +23%
+    [5] = 1.31,  -- +31%
+    [6] = 1.40,  -- +40%
+    [7] = 1.50,  -- +50%
+    [8] = 1.61,  -- +61%
+    [9] = 1.72,  -- +72%
+    [10] = 1.84, -- +84%
+    [11] = 2.02, -- +102%
+    [12] = 2.22, -- +122%
+    [13] = 2.45, -- +145%
+    [14] = 2.69, -- +169%
+    [15] = 2.96  -- +196%
+  },
+
+  -- Scaling constants for levels above the known table
+  SCALING_BASE_LEVEL = 12,      -- Level 12 is our base for extrapolation
+  SCALING_BASE_MODIFIER = 2.22, -- Level 12 modifier value
+  SCALING_MULTIPLIER = 1.10,    -- ~10% increase per level above 12
+  MAX_SUPPORTED_LEVEL = 35      -- Reasonable upper limit
+}
+
 -- Debug Constants
 PushMaster.Core.Constants.DEBUG = {
   ENABLED = false,
@@ -96,6 +123,53 @@ function PushMaster.Core.Constants:GetAddonInfo()
     wowVersion = self.WOW_VERSION,
     description = self.DESCRIPTION
   }
+end
+
+-- Calculate mythic+ health/damage scaling modifier for any key level
+-- @param keyLevel number The mythic+ key level
+-- @return number The scaling modifier (e.g., 2.45 for +145% at level 13)
+function PushMaster.Core.Constants:GetMythicPlusScalingModifier(keyLevel)
+  if not keyLevel or keyLevel < 2 then
+    return 1.0 -- No scaling below level 2
+  end
+
+  local scaling = self.MYTHIC_PLUS_SCALING
+
+  -- Use known values for levels 2-15
+  if scaling.HEALTH_DAMAGE_MODIFIERS[keyLevel] then
+    return scaling.HEALTH_DAMAGE_MODIFIERS[keyLevel]
+  end
+
+  -- For levels above our known table, use the scaling formula
+  if keyLevel > scaling.SCALING_BASE_LEVEL and keyLevel <= scaling.MAX_SUPPORTED_LEVEL then
+    local levelsAboveBase = keyLevel - scaling.SCALING_BASE_LEVEL
+    -- Apply compound 10% scaling: base * (1.10)^levels
+    return scaling.SCALING_BASE_MODIFIER * (scaling.SCALING_MULTIPLIER ^ levelsAboveBase)
+  end
+
+  -- Fallback for extremely high keys (above MAX_SUPPORTED_LEVEL)
+  if keyLevel > scaling.MAX_SUPPORTED_LEVEL then
+    local levelsAboveBase = scaling.MAX_SUPPORTED_LEVEL - scaling.SCALING_BASE_LEVEL
+    return scaling.SCALING_BASE_MODIFIER * (scaling.SCALING_MULTIPLIER ^ levelsAboveBase)
+  end
+
+  -- Fallback for edge cases
+  return 1.0
+end
+
+-- Helper function to calculate scaling ratio between two key levels
+-- @param sourceLevel number The source key level
+-- @param targetLevel number The target key level
+-- @return number The scaling ratio (targetModifier / sourceModifier)
+function PushMaster.Core.Constants:GetMythicPlusScalingRatio(sourceLevel, targetLevel)
+  local sourceModifier = self:GetMythicPlusScalingModifier(sourceLevel)
+  local targetModifier = self:GetMythicPlusScalingModifier(targetLevel)
+
+  if sourceModifier == 0 then
+    return 1.0 -- Avoid division by zero
+  end
+
+  return targetModifier / sourceModifier
 end
 
 return PushMaster.Core.Constants

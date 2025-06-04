@@ -921,6 +921,145 @@ function Calculator:GetBestTime()
   return nil
 end
 
+---Extrapolate a run from source key level to target key level
+---@param sourceRun table The source run data
+---@param sourceKeyLevel number The source key level
+---@param targetKeyLevel number The target key level
+---@return table|nil extrapolatedRun The extrapolated run data or nil if invalid
+function Calculator:ExtrapolateRunToKeyLevel(sourceRun, sourceKeyLevel, targetKeyLevel)
+  if not sourceRun or not sourceKeyLevel or not targetKeyLevel then
+    return nil
+  end
+
+  if sourceKeyLevel >= targetKeyLevel then
+    return nil -- Can't extrapolate to lower/same level
+  end
+
+  -- Get scaling ratio using our Constants module
+  local scalingRatio = PushMaster.Core.Constants:GetMythicPlusScalingRatio(sourceKeyLevel, targetKeyLevel)
+  if not scalingRatio or scalingRatio <= 1.0 then
+    return nil -- Invalid scaling ratio
+  end
+
+  -- Create a deep copy of the source run
+  local extrapolatedRun = self:_deepCopyTable(sourceRun)
+
+  -- Scale the total time
+  extrapolatedRun.totalTime = sourceRun.totalTime * scalingRatio
+  extrapolatedRun.keyLevel = targetKeyLevel
+
+  -- Add extrapolation metadata
+  extrapolatedRun.isExtrapolated = true
+  extrapolatedRun.sourceKeyLevel = sourceKeyLevel
+  extrapolatedRun.scalingRatio = scalingRatio
+  extrapolatedRun.extrapolationConfidence = self:_calculateExtrapolationConfidence(sourceKeyLevel, targetKeyLevel)
+
+  -- Scale timeline data if it exists
+  if extrapolatedRun.timeline then
+    for _, timepoint in ipairs(extrapolatedRun.timeline) do
+      if timepoint.time then
+        timepoint.time = timepoint.time * scalingRatio
+      end
+    end
+  end
+
+  -- Scale boss kill times if they exist
+  if extrapolatedRun.bossKillTimes then
+    for i, bossTime in ipairs(extrapolatedRun.bossKillTimes) do
+      extrapolatedRun.bossKillTimes[i] = bossTime * scalingRatio
+    end
+  end
+
+  -- Scale trash samples if they exist
+  if extrapolatedRun.trashSamples then
+    for _, sample in ipairs(extrapolatedRun.trashSamples) do
+      if sample.time then
+        sample.time = sample.time * scalingRatio
+      end
+    end
+  end
+
+  return extrapolatedRun
+end
+
+---Calculate confidence level for extrapolation based on key level gap
+---@param sourceLevel number Source key level
+---@param targetLevel number Target key level
+---@return number confidence Confidence percentage (0-100)
+function Calculator:_calculateExtrapolationConfidence(sourceLevel, targetLevel)
+  local levelGap = targetLevel - sourceLevel
+
+  -- Base confidence starts at 90% for 1 level gap
+  local baseConfidence = 90
+
+  -- Decrease confidence by 15% per additional level gap
+  local confidencePenalty = (levelGap - 1) * 15
+
+  -- Minimum confidence of 30%
+  local confidence = math.max(30, baseConfidence - confidencePenalty)
+
+  return confidence
+end
+
+---Deep copy a table (helper function)
+---@param original table The table to copy
+---@return table copy The deep copy
+function Calculator:_deepCopyTable(original)
+  if type(original) ~= "table" then
+    return original
+  end
+
+  local copy = {}
+  for key, value in pairs(original) do
+    if type(value) == "table" then
+      copy[key] = self:_deepCopyTable(value)
+    else
+      copy[key] = value
+    end
+  end
+  return copy
+end
+
+---Enhanced GetBestTime function with extrapolation support
+---@param dungeonID number|nil Dungeon ID (optional, uses current if nil)
+---@param keyLevel number|nil Key level (optional, uses current if nil)
+---@return table|nil bestTime The best time data (actual or extrapolated) or nil if none exists
+function Calculator:GetBestTimeWithExtrapolation(dungeonID, keyLevel)
+  -- Use current run data if parameters not provided
+  if not dungeonID or not keyLevel then
+    if not currentRun.instanceData then
+      return nil
+    end
+    dungeonID = dungeonID or currentRun.instanceData.dungeonID
+    keyLevel = keyLevel or currentRun.instanceData.cmLevel
+  end
+
+  -- First try to get exact match
+  if bestTimes[dungeonID] and bestTimes[dungeonID][keyLevel] then
+    return bestTimes[dungeonID][keyLevel]
+  end
+
+  -- If extrapolation is disabled, return nil
+  if not PushMasterDB or not PushMasterDB.settings or not PushMasterDB.settings.enableExtrapolation then
+    return nil
+  end
+
+  -- Try to find a timed run at lower key levels for extrapolation
+  if PushMaster.Core.Database then
+    local sourceRun, sourceLevel = PushMaster.Core.Database:GetBestRunForExtrapolation(dungeonID, keyLevel)
+    if sourceRun and sourceLevel then
+      local extrapolatedRun = self:ExtrapolateRunToKeyLevel(sourceRun, sourceLevel, keyLevel)
+      if extrapolatedRun then
+        PushMaster:DebugPrint(string.format("Extrapolated +%d data from +%d (%.1f%% confidence)",
+          keyLevel, sourceLevel, extrapolatedRun.extrapolationConfidence))
+        return extrapolatedRun
+      end
+    end
+  end
+
+  return nil
+end
+
 ---Calculate chest timers based on dungeon max time
 ---Adapted from MythicPlusTimer's chest calculation logic
 ---@param maxTime number Maximum time for the dungeon in seconds
@@ -966,7 +1105,7 @@ function Calculator:GetCurrentComparison()
   end
 
   -- Get best time data for comparison
-  local bestTime = self:GetBestTime(instanceData.dungeonID, instanceData.cmLevel)
+  local bestTime = self:GetBestTimeWithExtrapolation(instanceData.dungeonID, instanceData.cmLevel)
 
   -- Calculate chest timers (updated for TWW Season 2)
   local chestTimers = calculateChestTimers(instanceData.maxTime)

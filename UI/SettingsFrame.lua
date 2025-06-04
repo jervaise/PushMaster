@@ -52,7 +52,8 @@ local defaultSettings = {
   data = {
     trackAllRuns = true,
     saveIncompleteRuns = false,
-    autoReset = true
+    autoReset = true,
+    enableExtrapolation = false -- Default to disabled (advanced feature)
   }
 }
 
@@ -252,10 +253,19 @@ local function createSettingsFrame()
   )
   elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -10)
 
+  -- Key Level Extrapolation checkbox
+  elements.extrapolationCheckbox = createCheckbox(
+    leftBox,
+    "PushMasterExtrapolationCheckbox",
+    "Key Level Extrapolation",
+    "Compare against lower key levels when no data exists for current level.\nUses mythic+ scaling to estimate performance at higher keys."
+  )
+  elements.extrapolationCheckbox:SetPoint("TOPLEFT", elements.minimapCheckbox, "BOTTOMLEFT", 0, -10)
+
   -- Frame Scale section (more space above it)
   local scaleLabel = leftBox:CreateFontString(nil, "OVERLAY")
   scaleLabel:SetFont(ADDON_FONT, 10)
-  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -140)
+  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -160)
   scaleLabel:SetText("Frame Scale:")
   scaleLabel:SetTextColor(1, 1, 1)
 
@@ -379,6 +389,13 @@ local function loadSettings()
     elements.minimapCheckbox:SetChecked(true) -- Default fallback
   end
 
+  -- Load extrapolation setting (default to false for this advanced feature)
+  if PushMasterDB and PushMasterDB.settings then
+    elements.extrapolationCheckbox:SetChecked(PushMasterDB.settings.enableExtrapolation == true)
+  else
+    elements.extrapolationCheckbox:SetChecked(false) -- Default to disabled
+  end
+
   -- Load scale setting
   local scale = 1.0
   if PushMasterDB and PushMasterDB.settings and PushMasterDB.settings.frameScale then
@@ -438,6 +455,7 @@ local function saveSettings()
   if PushMasterDB and PushMasterDB.settings then
     PushMasterDB.settings.enabled = elements.enableCheckbox:GetChecked()
     PushMasterDB.settings.frameScale = elements.scaleSlider:GetValue()
+    PushMasterDB.settings.enableExtrapolation = elements.extrapolationCheckbox:GetChecked()
   end
 
   local showMinimap = elements.minimapCheckbox:GetChecked()
@@ -471,6 +489,7 @@ local function setupEventHandlers()
   -- Checkbox change handlers
   elements.enableCheckbox:SetScript("OnClick", saveSettings)
   elements.minimapCheckbox:SetScript("OnClick", saveSettings)
+  elements.extrapolationCheckbox:SetScript("OnClick", saveSettings)
 
   -- Scale slider handler
   elements.scaleSlider:SetScript("OnValueChanged", function(self, value)
