@@ -1159,7 +1159,11 @@ function Calculator:GetCurrentComparison()
 
     if ensembleResult then
       timeDelta = ensembleResult.timeDelta
-      timeConfidence = ensembleResult.confidence
+      -- Fix: ensembleResult returns confidenceBonus, not confidence
+      -- Calculate actual confidence by using the base confidence from the best method
+      local selectedMethod = self:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
+      local _, baseConfidence = self:CalculateTimeDeltaUsingMethod(selectedMethod.name, currentRun, bestTime, elapsedTime)
+      timeConfidence = math.min(100, (baseConfidence or 50) + ensembleResult.confidenceBonus)
 
       -- Calculate individual progress metrics using adaptive weights
       local dynamicWeights = self:CalculateDynamicEfficiencyWeights(currentRun, bestTime, elapsedTime)
