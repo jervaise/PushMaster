@@ -1039,7 +1039,7 @@ function Calculator:GetBestTimeWithExtrapolation(dungeonID, keyLevel)
     return bestTimes[dungeonID][keyLevel]
   end
 
-  -- If extrapolation is disabled, return nil
+  -- If extrapolation is disabled or no settings available, return nil (no extrapolation)
   if not PushMasterDB or not PushMasterDB.settings or not PushMasterDB.settings.enableExtrapolation then
     return nil
   end
@@ -1105,7 +1105,24 @@ function Calculator:GetCurrentComparison()
   end
 
   -- Get best time data for comparison
-  local bestTime = self:GetBestTimeWithExtrapolation(instanceData.dungeonID, instanceData.cmLevel)
+  local bestTime = self:GetBestTime()
+
+  -- If no exact match and extrapolation is enabled, try extrapolation
+  if not bestTime and PushMasterDB and PushMasterDB.settings and PushMasterDB.settings.enableExtrapolation then
+    -- Skip extrapolation during test mode since it uses different data structures
+    local isTestModeActive = PushMaster.UI and PushMaster.UI.TestMode and PushMaster.UI.TestMode:IsActive()
+    if not isTestModeActive and PushMaster.Core.Database then
+      local sourceRun, sourceLevel = PushMaster.Core.Database:GetBestRunForExtrapolation(instanceData.currentMapID,
+        instanceData.cmLevel)
+      if sourceRun and sourceLevel then
+        bestTime = self:ExtrapolateRunToKeyLevel(sourceRun, sourceLevel, instanceData.cmLevel)
+        if bestTime then
+          PushMaster:DebugPrint(string.format("Extrapolated +%d data from +%d (%.1f%% confidence)",
+            instanceData.cmLevel, sourceLevel, bestTime.extrapolationConfidence))
+        end
+      end
+    end
+  end
 
   -- Calculate chest timers (updated for TWW Season 2)
   local chestTimers = calculateChestTimers(instanceData.maxTime)
