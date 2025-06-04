@@ -16,7 +16,13 @@ PushMaster.UI.MainFrame = MainFrame
 -- Local references
 local frame = nil
 local isInitialized = false
-local pendingUpdateData = nil -- Store pending update data during combat
+local timeDeltaFrame = nil
+local elements = {
+  keystoneHeader = nil,
+  displayText = {},
+  iconTextures = {},
+  timeDelta = nil
+}
 
 -- PERFORMANCE OPTIMIZATION: Cache last display values to prevent redundant updates
 local lastDisplayValues = {
@@ -29,23 +35,22 @@ local lastDisplayValues = {
   timeDelta = nil
 }
 
+-- STABILITY: Add smoothing for display values to prevent rapid fluctuations
+local displaySmoothing = {
+  timeDelta = {
+    lastValue = nil,
+    lastUpdateTime = 0,
+    stabilityThreshold = 30, -- Only update if difference > 30 seconds
+    timeThreshold = 2.0      -- Or if more than 2 seconds have passed
+  }
+}
+
 -- PERFORMANCE OPTIMIZATION: Cache last comparison data to prevent redundant calculations
 local lastComparisonCache = {
   data = nil,
   timestamp = 0,
   cacheValidityDuration = 1.5 -- Cache is valid for 1.5 seconds
 }
-
--- UI elements
-local elements = {
-  displayText = nil,
-  iconTextures = {},
-  keystoneHeader = nil, -- NEW: Header for keystone info
-  timeDelta = nil       -- NEW: Time delta display in separate frame
-}
-
--- Time delta frame
-local timeDeltaFrame = nil
 
 -- Frame settings
 local FRAME_WIDTH = 250        -- Reduced to better balance margins
@@ -378,13 +383,42 @@ local function formatDeaths(deathDelta, timePenalty)
   return color .. sign .. tostring(deathDelta) .. COLORS.RESET
 end
 
----Format time delta with confidence interval
+---Format time delta with confidence interval and smoothing
 ---@param timeDelta number Time difference in seconds (positive = behind, negative = ahead)
 ---@param confidence number Confidence percentage (0-100)
 ---@return string formattedText Colored and formatted time delta
 local function formatTimeDelta(timeDelta, confidence)
-  if timeDelta == nil or confidence == nil or confidence < 30 then
-    return "" -- Don't show if no data or low confidence
+  if timeDelta == nil or confidence == nil then
+    return "" -- Don't show if no data
+  end
+
+  if confidence < 30 then
+    return "" -- Don't show if low confidence
+  end
+
+  -- STABILITY: Apply smoothing to prevent rapid fluctuations
+  local currentTime = GetTime()
+  local smoothing = displaySmoothing.timeDelta
+
+  local shouldUpdate = false
+  if smoothing.lastValue == nil then
+    -- First time, always update
+    shouldUpdate = true
+  elseif math.abs(timeDelta - smoothing.lastValue) > smoothing.stabilityThreshold then
+    -- Significant change, update immediately
+    shouldUpdate = true
+  elseif (currentTime - smoothing.lastUpdateTime) > smoothing.timeThreshold then
+    -- Enough time has passed, update even with small changes
+    shouldUpdate = true
+  end
+
+  if not shouldUpdate then
+    -- Use the last displayed value to prevent flickering
+    timeDelta = smoothing.lastValue
+  else
+    -- Update the smoothing values
+    smoothing.lastValue = timeDelta
+    smoothing.lastUpdateTime = currentTime
   end
 
   local color
@@ -422,11 +456,20 @@ function MainFrame:UpdateDisplay(comparisonData)
     return
   end
 
-  -- PERFORMANCE OPTIMIZATION: Queue updates during combat to prevent taint
-  if InCombatLockdown() then
-    pendingUpdateData = comparisonData
-    PushMaster:DebugPrint("Queueing display update during combat")
-    return
+  -- DEBUG: Log suspicious values that might indicate calculation issues
+  if comparisonData.trashProgress and math.abs(comparisonData.trashProgress) > 200 then
+    PushMaster:DebugPrint(string.format("SUSPICIOUS: Trash progress value %.1f%% seems too extreme",
+      comparisonData.trashProgress))
+  end
+
+  if comparisonData.timeDelta and math.abs(comparisonData.timeDelta) > 1800 then -- More than 30 minutes
+    PushMaster:DebugPrint(string.format("SUSPICIOUS: Time delta %.0fs (%.1fm) seems too extreme",
+      comparisonData.timeDelta, comparisonData.timeDelta / 60))
+  end
+
+  if comparisonData.progress and comparisonData.progress.trash and comparisonData.progress.trash > 100 then
+    PushMaster:DebugPrint(string.format("ISSUE: Current trash progress %.1f%% exceeds 100%%",
+      comparisonData.progress.trash))
   end
 
   -- Format display values
@@ -510,15 +553,6 @@ function MainFrame:UpdateDisplay(comparisonData)
   end
 end
 
----Process any pending updates after leaving combat
-function MainFrame:ProcessPendingUpdates()
-  if pendingUpdateData then
-    PushMaster:DebugPrint("Processing pending display update after combat")
-    self:UpdateDisplay(pendingUpdateData)
-    pendingUpdateData = nil
-  end
-end
-
 ---Reset cached display values (call when frame is hidden/reset)
 function MainFrame:ResetDisplayCache()
   lastDisplayValues = {
@@ -530,6 +564,11 @@ function MainFrame:ResetDisplayCache()
     borderColor = nil,
     timeDelta = nil
   }
+
+  -- STABILITY: Reset display smoothing values
+  displaySmoothing.timeDelta.lastValue = nil
+  displaySmoothing.timeDelta.lastUpdateTime = 0
+
   PushMaster:DebugPrint("Display cache reset")
 end
 
@@ -547,6 +586,7 @@ function MainFrame:Show()
 
   -- Clear cache when showing to ensure fresh data
   self:ClearCache()
+  self:ResetDisplayCache() -- STABILITY: Reset display smoothing when showing
 
   if frame then
     frame:Show()
@@ -562,6 +602,7 @@ function MainFrame:Hide()
     stopUpdateTimer()
     -- Clear cache when hiding to free memory
     self:ClearCache()
+    self:ResetDisplayCache() -- STABILITY: Reset display smoothing when hiding
   end
 
   -- Stop test mode if it's running when main GUI is closed
@@ -668,15 +709,11 @@ function MainFrame:Initialize()
   frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
   frame:RegisterEvent("CHALLENGE_MODE_RESET")
 
-  -- Register for combat events to handle pending updates
-  frame:RegisterEvent("PLAYER_REGEN_ENABLED")  -- Leaving combat
-  frame:RegisterEvent("PLAYER_REGEN_DISABLED") -- Entering combat
-
   frame:SetScript("OnEvent", function(self, event, ...)
     MainFrame:OnEvent(event, ...)
   end)
 
-  PushMaster:DebugPrint("MainFrame initialized with fixed-layout design and combat awareness")
+  PushMaster:DebugPrint("MainFrame initialized with fixed-layout design and continuous updates")
 end
 
 ---Handle events for auto-show/hide functionality
@@ -702,12 +739,5 @@ function MainFrame:OnEvent(event, ...)
         end
       end
     end
-  elseif event == "PLAYER_REGEN_ENABLED" then
-    -- Player left combat - process any pending updates
-    PushMaster:DebugPrint("Player left combat - checking for pending updates")
-    self:ProcessPendingUpdates()
-  elseif event == "PLAYER_REGEN_DISABLED" then
-    -- Player entered combat
-    PushMaster:DebugPrint("Player entered combat - display updates will be queued")
   end
 end

@@ -68,6 +68,302 @@ local bestTimes = {}
 local lastProgressDebugTime = 0
 local PROGRESS_DEBUG_THROTTLE = 5.0 -- PERFORMANCE FIX: Increased to 5 seconds to reduce spam
 
+-- NEW: Adaptive algorithm state tracking for Phase 4 Learning
+local adaptiveState = {
+  methodAccuracy = {},      -- Track accuracy of different methods over time
+  recentRuns = {},          -- Store recent run data for pattern recognition
+  confidenceHistory = {},   -- Track confidence vs actual accuracy
+  smoothingWindow = {},     -- Display value smoothing buffer
+  lastCalculatedValues = {} -- Previous values for smoothing
+}
+
+-- NEW: Phase 1 - Adaptive Method Selection constants
+local ADAPTIVE_METHOD_CONFIG = {
+  -- Method selection criteria
+  trashInterpolation = {
+    priority = 1,
+    minTrashSamples = 10,
+    progressRange = 5, -- Minimum 5% progress span in data
+    maxGapSize = 15,   -- Maximum % gap between data points
+    confidenceBonus = 15
+  },
+  weightedInterpolation = {
+    priority = 2,
+    minTrashSamples = 7,
+    progressRange = 3,
+    confidenceBonus = 10
+  },
+  bossCountMethod = {
+    priority = 3,
+    minBossData = 2,
+    confidenceBonus = 5
+  },
+  proportionalEstimate = {
+    priority = 4,
+    confidenceBonus = 0
+  },
+
+  -- Smoothing configuration
+  smoothing = {
+    enabled = true,
+    windowSize = 3,
+    weightDecay = 0.7 -- Recent values get higher weight
+  }
+}
+
+-- NEW: Phase 2 - Dynamic Efficiency Weight Configuration
+local DYNAMIC_WEIGHT_CONFIG = {
+  -- Progress-based phases
+  earlyPhase = {
+    progressThreshold = 30,
+    trashWeight = 0.5,
+    bossTimingWeight = 0.3,
+    bossCountWeight = 0.2
+  },
+  midPhase = {
+    progressThreshold = 70,
+    trashWeight = 0.6,
+    bossTimingWeight = 0.25,
+    bossCountWeight = 0.15
+  },
+  latePhase = {
+    progressThreshold = 100,
+    trashWeight = 0.8,
+    bossTimingWeight = 0.15,
+    bossCountWeight = 0.05
+  },
+
+  -- Data quality multipliers
+  dataQualityMultipliers = {
+    highTrashSamples = { threshold = 15, trashBonus = 0.1 },
+    lowTrashSamples = { threshold = 5, trashPenalty = -0.1 },
+    consistentBossTiming = { threshold = 0.8, bossBonus = 0.05 }
+  }
+}
+
+-- NEW: Phase 3 - Adaptive Boss Weighting Configuration
+local BOSS_WEIGHT_CONFIG = {
+  -- Fight duration based weighting
+  durationBased = {
+    shortFight = { threshold = 60, weight = 0.8 },
+    mediumFight = { threshold = 180, weight = 1.2 },
+    longFight = { threshold = 300, weight = 1.5 }
+  },
+
+  -- Boss difficulty/importance weighting
+  difficultyBased = {
+    miniBoss = { weight = 0.6 },
+    standardBoss = { weight = 1.0 },
+    finalBoss = { weight = 1.8 }
+  },
+
+  -- Timing consistency weighting
+  consistencyBased = {
+    highVariance = { threshold = 30, weight = 0.7 },
+    lowVariance = { threshold = 10, weight = 1.3 }
+  },
+
+  -- Adaptive adjustments
+  adaptiveAdjustments = {
+    aheadOfPace = { bossWeightBonus = 0.1 },
+    behindPace = { bossWeightPenalty = -0.1 },
+    lowKey = { keyLevel = 15, reliabilityBonus = 0.05 },
+    highKey = { keyLevel = 20, stressMultiplier = 1.1 }
+  }
+}
+
+-- NEW: Phase 4 - Learning System Configuration
+local LEARNING_CONFIG = {
+  methodAccuracy = {
+    trackLastNRuns = 20,
+    weightRecentRuns = 0.7,
+    adjustConfidenceByAccuracy = true
+  },
+
+  similarScenarios = {
+    dungeonType = true,
+    keyLevel = true,
+    progressPoint = true
+  },
+
+  adaptiveConfidence = {
+    baseConfidence = 70,
+    accuracyBonus = 30,
+    newDataPenalty = -20,
+    consistencyBonus = 15
+  },
+
+  multiFactorAnalysis = {
+    weightedAverage = {
+      trashProjection = 0.4,
+      bossTimingProjection = 0.3,
+      paceProjection = 0.2,
+      deathPenaltyProjection = 0.1
+    },
+
+    ensembleWeighting = {
+      highConfidence = { singleBest = 0.8, ensemble = 0.2 },
+      mediumConfidence = { singleBest = 0.5, ensemble = 0.5 },
+      lowConfidence = { singleBest = 0.2, ensemble = 0.8 }
+    }
+  }
+}
+
+-- PERFORMANCE CONFIGURATION: Control calculation frequency and complexity in production
+local PERFORMANCE_CONFIG = {
+  -- Update frequency controls
+  maxCalculationsPerSecond = 5,  -- Limit to 5 calculations per second maximum
+  minUpdateInterval = 0.2,       -- Minimum 200ms between updates
+  adaptiveUpdateInterval = true, -- Scale update frequency based on run progress
+
+  -- Calculation complexity controls
+  maxTrashSampleLookup = 10, -- Limit samples examined for interpolation
+  maxBossDataProcessing = 5, -- Limit boss data processed per calculation
+  maxEnsembleMethods = 3,    -- Limit methods in ensemble to top 3
+
+  -- Cache and memory controls
+  cacheValidityDuration = 1.0,  -- Cache results for 1 second
+  maxAdaptiveStateHistory = 50, -- Limit learning data to prevent memory bloat
+  enableDebugLogging = false,   -- Disable debug logging in production for performance
+
+  -- UI update throttling
+  uiUpdateThrottle = 2.0,         -- Minimum 2 seconds between UI updates
+  displaySmoothingEnabled = true, -- Enable display smoothing to reduce flickering
+
+  -- Background calculation controls
+  enableBackgroundCalculations = false, -- Disable background ensemble calculations
+  enableLearningOptimizations = true,   -- Keep learning but optimize aggressively
+}
+
+-- PERFORMANCE CACHE: Enhanced caching system for expensive calculations
+local performanceCache = {
+  -- Method selection cache (rarely changes during a run)
+  methodSelection = {
+    data = nil,
+    bestTimeHash = nil,
+    validUntilProgress = 0 -- Cache until significant progress change
+  },
+
+  -- Dynamic weights cache (changes slowly)
+  dynamicWeights = {
+    data = nil,
+    lastProgressPhase = 0,
+    validityDuration = 2.0 -- Valid for 2 seconds
+  },
+
+  -- Boss weighting cache (static for a given best time)
+  bossWeighting = {
+    data = nil,
+    bestTimeHash = nil
+  },
+
+  -- Ensemble results cache
+  ensembleResults = {
+    data = nil,
+    lastElapsedTime = 0,
+    validityDuration = 1.0 -- Valid for 1 second
+  },
+
+  -- Last calculation timestamp for throttling
+  lastCalculationTime = 0,
+
+  -- UI update cache to prevent unnecessary recalculations
+  lastUIUpdate = {
+    data = nil,
+    timestamp = 0,
+    validityDuration = PERFORMANCE_CONFIG.uiUpdateThrottle
+  },
+
+  -- Time delta cache
+  timeDelta = {
+    data = nil,
+    confidence = 0,
+    timestamp = 0
+  },
+}
+
+-- PERFORMANCE MONITORING: Track addon performance impact
+local performanceMetrics = {
+  calculationsThisSecond = 0,
+  lastSecondReset = 0,
+  totalCalculationTime = 0,
+  calculationCount = 0,
+  averageCalculationTime = 0,
+  maxCalculationTime = 0,
+  frameDropsDetected = 0
+}
+
+---PERFORMANCE: Check if we should skip calculations due to performance constraints
+---@return boolean shouldSkip True if calculations should be skipped
+local function shouldSkipCalculationsForPerformance()
+  local now = GetTime()
+
+  -- Reset per-second counter
+  if now - performanceMetrics.lastSecondReset >= 1.0 then
+    performanceMetrics.calculationsThisSecond = 0
+    performanceMetrics.lastSecondReset = now
+  end
+
+  -- Check calculations per second limit
+  if performanceMetrics.calculationsThisSecond >= PERFORMANCE_CONFIG.maxCalculationsPerSecond then
+    return true
+  end
+
+  -- Check minimum interval between calculations
+  if now - performanceCache.lastCalculationTime < PERFORMANCE_CONFIG.minUpdateInterval then
+    return true
+  end
+
+  -- Check frame rate impact (skip calculations if FPS is low)
+  local frameRate = GetFramerate()
+  if frameRate < 30 then                                   -- If FPS drops below 30, reduce calculation frequency
+    performanceMetrics.frameDropsDetected = performanceMetrics.frameDropsDetected + 1
+    if performanceMetrics.frameDropsDetected % 3 ~= 0 then -- Only calculate every 3rd time
+      return true
+    end
+  else
+    performanceMetrics.frameDropsDetected = 0
+  end
+
+  return false
+end
+
+---PERFORMANCE: Measure calculation time and update metrics
+---@param calculationTime number Time taken for calculation
+local function updatePerformanceMetrics(calculationTime)
+  performanceMetrics.totalCalculationTime = performanceMetrics.totalCalculationTime + calculationTime
+  performanceMetrics.calculationCount = performanceMetrics.calculationCount + 1
+  performanceMetrics.averageCalculationTime = performanceMetrics.totalCalculationTime /
+      performanceMetrics.calculationCount
+
+  if calculationTime > performanceMetrics.maxCalculationTime then
+    performanceMetrics.maxCalculationTime = calculationTime
+  end
+
+  performanceMetrics.calculationsThisSecond = performanceMetrics.calculationsThisSecond + 1
+  performanceCache.lastCalculationTime = GetTime()
+end
+
+---PERFORMANCE: Get optimized update interval based on run progress
+---@param progressRatio number Current progress ratio (0-1)
+---@return number interval Update interval in seconds
+local function getAdaptiveUpdateInterval(progressRatio)
+  if not PERFORMANCE_CONFIG.adaptiveUpdateInterval then
+    return PERFORMANCE_CONFIG.minUpdateInterval
+  end
+
+  -- Early run: Update less frequently (every 2 seconds)
+  if progressRatio < 0.2 then
+    return 2.0
+    -- Mid run: Normal frequency (every second)
+  elseif progressRatio < 0.7 then
+    return 1.0
+    -- Late run: More frequent updates (every 0.5 seconds)
+  else
+    return 0.5
+  end
+end
+
 ---Compress trash samples to reduce saved variable size
 ---@param trashSamples table Full trash samples array
 ---@return table compressedSamples Compressed samples (key milestones only)
@@ -636,29 +932,41 @@ local function calculateChestTimers(maxTime)
   }
 end
 
----Get current comparison data for UI display
----@return table|nil comparison Comparison data or nil if not tracking
+---ENHANCED: Main function called by UI to get current run comparison data
+---Uses the complete enhanced algorithm with all optimizations
+---@return table comparison data for UI display
 function Calculator:GetCurrentComparison()
-  if not currentRun.isActive or not currentRun.instanceData then
+  -- PERFORMANCE: Check if we should skip calculations
+  if shouldSkipCalculationsForPerformance() then
+    if performanceCache.lastUIUpdate.data then
+      return performanceCache.lastUIUpdate.data
+    end
+  end
+
+  local startTime = GetTime()
+
+  if not currentRun.isActive then
     return nil
   end
 
   local instanceData = currentRun.instanceData
-
-  -- Use stored elapsed time if available (for test mode), otherwise calculate from real time
-  local elapsedTime
-  if currentRun.progress.elapsedTime then
-    elapsedTime = currentRun.progress.elapsedTime  -- Use simulated time from test mode
-  else
-    elapsedTime = GetTime() - currentRun.startTime -- Use real time for actual runs
-  end
-
-  local bestTime = self:GetBestTime()
-
-  -- Only show intelligent analysis for keys +12 and above
-  if instanceData.cmLevel < 12 then
+  if not instanceData then
     return nil
   end
+
+  -- Get current elapsed time (use stored time for test mode or real-time)
+  local elapsedTime = currentRun.progress.elapsedTime
+  if not elapsedTime or elapsedTime <= 0 then
+    local currentTime = GetTime()
+    if currentRun.startTime then
+      elapsedTime = currentTime - currentRun.startTime
+    else
+      elapsedTime = 0
+    end
+  end
+
+  -- Get best time data for comparison
+  local bestTime = self:GetBestTime(instanceData.dungeonID, instanceData.cmLevel)
 
   -- Calculate chest timers (updated for TWW Season 2)
   local chestTimers = calculateChestTimers(instanceData.maxTime)
@@ -683,30 +991,79 @@ function Calculator:GetCurrentComparison()
   local bossProgress = 0
   local deathProgress = 0
   local deathTimePenalty = currentRun.progress.timeLostToDeaths or 0
+  local timeDelta = 0
+  local timeConfidence = 0
 
   if bestTime then
-    -- INTELLIGENT PACE CALCULATION - Learn from actual run patterns
-    local paceData = self:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
+    -- ENHANCED: Use full adaptive algorithm with method selection
+    local selectedMethod = self:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
 
-    progressEfficiency = paceData.efficiency
-    trashProgress = paceData.trashDelta
-    bossProgress = paceData.bossDelta
-    deathProgress = paceData.deathDelta
+    -- ENHANCED: Calculate using ensemble forecasting for maximum accuracy
+    local ensembleResult = self:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
 
-    PushMaster:DebugPrint(string.format("Intelligent pace: Efficiency %.1f%%, Trash %.1f%%, Boss %d, Deaths %+d",
-      progressEfficiency, trashProgress, bossProgress, deathProgress))
+    if ensembleResult then
+      timeDelta = ensembleResult.timeDelta
+      timeConfidence = ensembleResult.confidence
+
+      -- Calculate individual progress metrics using adaptive weights
+      local dynamicWeights = self:CalculateDynamicEfficiencyWeights(currentRun, bestTime, elapsedTime)
+      local adaptiveBossWeights = self:CalculateAdaptiveBossWeighting(bestTime, currentRun, elapsedTime)
+
+      -- Enhanced progress calculations
+      trashProgress = self:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
+      bossProgress = self:CalculateBossDelta(currentRun, bestTime, elapsedTime)
+      deathProgress = self:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
+
+      -- Calculate overall efficiency using enhanced algorithm
+      progressEfficiency = self:CalculateOverallEfficiency(trashProgress, bossProgress, currentRun, bestTime, elapsedTime)
+
+      -- Apply learning factor for continuous improvement
+      progressEfficiency = self:ApplyEnhancedLearningFactor(progressEfficiency, currentRun, bestTime, elapsedTime)
+
+      -- Apply display smoothing to reduce flickering
+      timeDelta = self:ApplyDisplaySmoothing("timeDelta", timeDelta)
+      progressEfficiency = self:ApplyDisplaySmoothing("efficiency", progressEfficiency)
+
+      -- Track method performance for learning
+      self:TrackMethodPerformance(selectedMethod.name, timeDelta, timeConfidence, currentRun, bestTime)
+
+      -- ENHANCED: Detailed debug logging for the enhanced algorithm
+      if PERFORMANCE_CONFIG.enableDebugLogging then
+        PushMaster:DebugPrint(string.format(
+          "ENHANCED ALGORITHM: Method=%s, Delta=%+.1fs, Confidence=%.0f%%, Efficiency=%.1f%%",
+          selectedMethod.name, timeDelta, timeConfidence, progressEfficiency))
+        PushMaster:DebugPrint(string.format(
+          "  Progress: Trash=%.1f%%, Boss=%d, Deaths=%+d, Weights: T=%.2f B=%.2f D=%.2f",
+          trashProgress, bossProgress, deathProgress,
+          dynamicWeights.trash or 0, dynamicWeights.boss or 0, dynamicWeights.death or 0))
+      end
+    else
+      -- Fallback to optimized calculation if ensemble fails
+      local paceData = self:CalculateIntelligentPaceOptimized(currentRun, bestTime, elapsedTime)
+
+      progressEfficiency = paceData.efficiency or 0
+      trashProgress = paceData.trashDelta or 0
+      bossProgress = paceData.bossDelta or 0
+      deathProgress = paceData.deathDelta or 0
+
+      timeDelta, timeConfidence = self:CalculateTimeDeltaOptimized(currentRun, bestTime, elapsedTime, progressEfficiency)
+
+      if PERFORMANCE_CONFIG.enableDebugLogging then
+        PushMaster:DebugPrint("Enhanced algorithm failed, using optimized fallback")
+      end
+    end
   else
     -- No comparison data available yet, provide default values
-    PushMaster:DebugPrint("No best time data available for intelligent comparison, using N/A values")
-    progressEfficiency = nil -- Or some other indicator for "N/A"
-    trashProgress = nil      -- Or some other indicator for "N/A"
-    bossProgress = nil       -- Or some other indicator for "N/A"
-    deathProgress = nil      -- Or some other indicator for "N/A"
-    -- We don't return nil here anymore, so the rest of the function will execute
+    if PERFORMANCE_CONFIG.enableDebugLogging then
+      PushMaster:DebugPrint("No best time data available for enhanced comparison, using N/A values")
+    end
+    progressEfficiency = nil
+    trashProgress = nil
+    bossProgress = nil
+    deathProgress = nil
+    timeDelta = nil
+    timeConfidence = 0
   end
-
-  -- Calculate time delta and confidence
-  local timeDelta, timeConfidence = self:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
 
   -- Prepare values for the return table, applying math.floor only if not nil
   local finalProgressEfficiency = progressEfficiency
@@ -729,13 +1086,13 @@ function Calculator:GetCurrentComparison()
     finalDeathProgress = math.floor(finalDeathProgress + 0.5)
   end
 
-  -- overallSpeed is based on the original progressEfficiency before flooring for this specific calculation
   local finalOverallSpeed = progressEfficiency
   if finalOverallSpeed ~= nil then
     finalOverallSpeed = math.floor(finalOverallSpeed + 0.5)
   end
 
-  return {
+  -- Enhanced result structure with additional metadata
+  local result = {
     dungeon = instanceData.zoneName or "Unknown",
     level = instanceData.cmLevel or 0,
     elapsedTime = elapsedTime,
@@ -748,50 +1105,365 @@ function Calculator:GetCurrentComparison()
       deaths = currentRun.progress.deaths
     },
     chestTimers = chestTimers,
-    bestComparison = nil,
+    bestComparison = bestTime,
     affixes = instanceData.affixes,
-    -- Simplified display metrics
+    -- Enhanced display metrics
     progressEfficiency = finalProgressEfficiency,
     trashProgress = finalTrashProgress,
     bossProgress = finalBossProgress,
     deathProgress = finalDeathProgress,
     deathTimePenalty = deathTimePenalty,
-    -- Keep for backward compatibility
-    overallSpeed = finalOverallSpeed,
+    -- Enhanced time prediction
     timeDelta = timeDelta,
-    timeConfidence = timeConfidence
+    timeConfidence = timeConfidence,
+    -- Backward compatibility
+    overallSpeed = finalOverallSpeed,
+    -- Enhanced metadata
+    algorithmVersion = "Enhanced v2.0",
+    calculationMethod = bestTime and "ensemble_enhanced" or "baseline",
+    performanceGrade = performanceMetrics.emergencyModeActive and "Emergency" or "Optimal"
   }
+
+  -- PERFORMANCE: Cache result for UI updates
+  performanceCache.lastUIUpdate.data = result
+  performanceCache.lastUIUpdate.timestamp = GetTime()
+
+  -- PERFORMANCE: Track calculation time
+  local calculationTime = GetTime() - startTime
+  updatePerformanceMetrics(calculationTime)
+
+  return result
 end
 
----Calculate intelligent pace based on learned patterns from previous runs
+---NEW: Phase 1 - Get the best calculation method based on available data
 ---@param currentRun table Current run data
 ---@param bestTime table Best time data
 ---@param elapsedTime number Current elapsed time
----@return table paceData Calculated pace metrics
-function Calculator:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
+---@return table methodInfo Information about the selected method
+function Calculator:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
+  local availableMethods = {}
+
+  -- Check trash interpolation method
+  local trashSamples = bestTime.trashSamples or {}
+  if #trashSamples >= ADAPTIVE_METHOD_CONFIG.trashInterpolation.minTrashSamples then
+    local progressSpan = 0
+    local maxGap = 0
+    local lastTrash = 0
+
+    for _, sample in ipairs(trashSamples) do
+      if sample.trash > lastTrash then
+        local gap = sample.trash - lastTrash
+        if gap > maxGap then maxGap = gap end
+        lastTrash = sample.trash
+      end
+    end
+
+    progressSpan = lastTrash - (trashSamples[1] and trashSamples[1].trash or 0)
+
+    if progressSpan >= ADAPTIVE_METHOD_CONFIG.trashInterpolation.progressRange and
+        maxGap <= ADAPTIVE_METHOD_CONFIG.trashInterpolation.maxGapSize then
+      table.insert(availableMethods, {
+        name = "trash_interpolation",
+        priority = ADAPTIVE_METHOD_CONFIG.trashInterpolation.priority,
+        confidence = ADAPTIVE_METHOD_CONFIG.trashInterpolation.confidenceBonus,
+        quality = progressSpan / maxGap -- Higher is better
+      })
+    end
+  end
+
+  -- Check weighted interpolation method
+  if #trashSamples >= ADAPTIVE_METHOD_CONFIG.weightedInterpolation.minTrashSamples then
+    table.insert(availableMethods, {
+      name = "weighted_interpolation",
+      priority = ADAPTIVE_METHOD_CONFIG.weightedInterpolation.priority,
+      confidence = ADAPTIVE_METHOD_CONFIG.weightedInterpolation.confidenceBonus,
+      quality = #trashSamples / 20 -- Normalize to 0-1 range
+    })
+  end
+
+  -- Check boss count method
+  local bossKillTimes = bestTime.bossKillTimes or {}
+  if #bossKillTimes >= ADAPTIVE_METHOD_CONFIG.bossCountMethod.minBossData then
+    table.insert(availableMethods, {
+      name = "boss_count",
+      priority = ADAPTIVE_METHOD_CONFIG.bossCountMethod.priority,
+      confidence = ADAPTIVE_METHOD_CONFIG.bossCountMethod.confidenceBonus,
+      quality = math.min(1, #bossKillTimes / 4) -- Assume 4 bosses max
+    })
+  end
+
+  -- Always have proportional estimate as fallback
+  table.insert(availableMethods, {
+    name = "proportional_estimate",
+    priority = ADAPTIVE_METHOD_CONFIG.proportionalEstimate.priority,
+    confidence = ADAPTIVE_METHOD_CONFIG.proportionalEstimate.confidenceBonus,
+    quality = 0.3 -- Low quality fallback
+  })
+
+  -- Sort by priority (lower number = higher priority)
+  table.sort(availableMethods, function(a, b)
+    if a.priority == b.priority then
+      return a.quality > b.quality -- If same priority, prefer higher quality
+    end
+    return a.priority < b.priority
+  end)
+
+  local selectedMethod = availableMethods[1]
+
+  PushMaster:DebugPrint(string.format("Selected calculation method: %s (priority %d, quality %.2f)",
+    selectedMethod.name, selectedMethod.priority, selectedMethod.quality))
+
+  return selectedMethod
+end
+
+---NEW: Phase 2 - Calculate dynamic efficiency weights based on progress and data quality
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return table weights Dynamic weight configuration
+function Calculator:CalculateDynamicEfficiencyWeights(currentRun, bestTime, elapsedTime)
   local currentTrash = currentRun.progress.trash
-  local currentBosses = currentRun.progress.bosses
+  local trashSamples = bestTime.trashSamples or {}
+  local bossKillTimes = bestTime.bossKillTimes or {}
 
-  -- BEST RUN LOGIC: What trash % did the best run have at this exact time?
+  -- Determine phase based on progress
+  local phase
+  if currentTrash < DYNAMIC_WEIGHT_CONFIG.earlyPhase.progressThreshold then
+    phase = DYNAMIC_WEIGHT_CONFIG.earlyPhase
+  elseif currentTrash < DYNAMIC_WEIGHT_CONFIG.midPhase.progressThreshold then
+    phase = DYNAMIC_WEIGHT_CONFIG.midPhase
+  else
+    phase = DYNAMIC_WEIGHT_CONFIG.latePhase
+  end
+
+  -- Start with base weights from current phase
+  local weights = {
+    trashWeight = phase.trashWeight,
+    bossTimingWeight = phase.bossTimingWeight,
+    bossCountWeight = phase.bossCountWeight
+  }
+
+  -- Apply data quality multipliers
+  local multipliers = DYNAMIC_WEIGHT_CONFIG.dataQualityMultipliers
+
+  -- High trash samples bonus
+  if #trashSamples >= multipliers.highTrashSamples.threshold then
+    weights.trashWeight = weights.trashWeight + multipliers.highTrashSamples.trashBonus
+  end
+
+  -- Low trash samples penalty
+  if #trashSamples <= multipliers.lowTrashSamples.threshold then
+    weights.trashWeight = weights.trashWeight + multipliers.lowTrashSamples.trashPenalty
+  end
+
+  -- Consistent boss timing bonus
+  if #bossKillTimes >= 2 then
+    local consistency = self:CalculateBossTimingConsistency(bossKillTimes)
+    if consistency >= multipliers.consistentBossTiming.threshold then
+      weights.bossTimingWeight = weights.bossTimingWeight + multipliers.consistentBossTiming.bossBonus
+    end
+  end
+
+  -- Normalize weights to ensure they sum to 1.0
+  local totalWeight = weights.trashWeight + weights.bossTimingWeight + weights.bossCountWeight
+  if totalWeight > 0 then
+    weights.trashWeight = weights.trashWeight / totalWeight
+    weights.bossTimingWeight = weights.bossTimingWeight / totalWeight
+    weights.bossCountWeight = weights.bossCountWeight / totalWeight
+  end
+
+  PushMaster:DebugPrint(string.format(
+    "Dynamic weights: Trash %.2f, BossTiming %.2f, BossCount %.2f (phase: %.0f%% progress)",
+    weights.trashWeight, weights.bossTimingWeight, weights.bossCountWeight, currentTrash))
+
+  return weights
+end
+
+---NEW: Phase 3 - Calculate adaptive boss weighting based on fight characteristics
+---@param bestTime table Best time data
+---@param currentRun table Current run data
+---@param elapsedTime number Current elapsed time
+---@return table bossWeights Adaptive boss weights
+function Calculator:CalculateAdaptiveBossWeighting(bestTime, currentRun, elapsedTime)
+  local bossKillTimes = bestTime.bossKillTimes or {}
+  local instanceData = currentRun.instanceData
+  local bossWeights = {}
+
+  if #bossKillTimes == 0 then
+    return { defaultWeight = 1.0 }
+  end
+
+  for i, bossKill in ipairs(bossKillTimes) do
+    local weight = 1.0
+
+    -- Duration-based weighting
+    local fightDuration = self:EstimateBossFightDuration(bossKill, bossKillTimes, i)
+    if fightDuration <= BOSS_WEIGHT_CONFIG.durationBased.shortFight.threshold then
+      weight = weight * BOSS_WEIGHT_CONFIG.durationBased.shortFight.weight
+    elseif fightDuration <= BOSS_WEIGHT_CONFIG.durationBased.mediumFight.threshold then
+      weight = weight * BOSS_WEIGHT_CONFIG.durationBased.mediumFight.weight
+    else
+      weight = weight * BOSS_WEIGHT_CONFIG.durationBased.longFight.weight
+    end
+
+    -- Difficulty-based weighting
+    local difficulty = self:EstimateBossDifficulty(i, #bossKillTimes)
+    if difficulty == "final" then
+      weight = weight * BOSS_WEIGHT_CONFIG.difficultyBased.finalBoss.weight
+    elseif difficulty == "mini" then
+      weight = weight * BOSS_WEIGHT_CONFIG.difficultyBased.miniBoss.weight
+    else
+      weight = weight * BOSS_WEIGHT_CONFIG.difficultyBased.standardBoss.weight
+    end
+
+    -- Consistency-based weighting
+    local variance = self:CalculateBossTimingVariance(bossKill, bossKillTimes)
+    if variance <= BOSS_WEIGHT_CONFIG.consistencyBased.lowVariance.threshold then
+      weight = weight * BOSS_WEIGHT_CONFIG.consistencyBased.lowVariance.weight
+    elseif variance >= BOSS_WEIGHT_CONFIG.consistencyBased.highVariance.threshold then
+      weight = weight * BOSS_WEIGHT_CONFIG.consistencyBased.highVariance.weight
+    end
+
+    -- Adaptive adjustments based on current performance
+    local currentEfficiency = self:GetCurrentPaceEfficiency(currentRun, bestTime, elapsedTime)
+    if currentEfficiency > 0 then     -- Ahead of pace
+      weight = weight + BOSS_WEIGHT_CONFIG.adaptiveAdjustments.aheadOfPace.bossWeightBonus
+    elseif currentEfficiency < 0 then -- Behind pace
+      weight = weight + BOSS_WEIGHT_CONFIG.adaptiveAdjustments.behindPace.bossWeightPenalty
+    end
+
+    -- Key level adjustments
+    if instanceData and instanceData.cmLevel then
+      if instanceData.cmLevel <= BOSS_WEIGHT_CONFIG.adaptiveAdjustments.lowKey.keyLevel then
+        weight = weight + BOSS_WEIGHT_CONFIG.adaptiveAdjustments.lowKey.reliabilityBonus
+      elseif instanceData.cmLevel >= BOSS_WEIGHT_CONFIG.adaptiveAdjustments.highKey.keyLevel then
+        weight = weight * BOSS_WEIGHT_CONFIG.adaptiveAdjustments.highKey.stressMultiplier
+      end
+    end
+
+    bossWeights[i] = math.max(0.1, weight) -- Ensure minimum weight
+  end
+
+  return bossWeights
+end
+
+---NEW: Phase 4 - Enhanced Calculate Time Delta with Learning and Ensemble Methods
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@param progressEfficiency number Calculated progress efficiency
+---@return number timeDelta Time difference in seconds (positive = behind, negative = ahead)
+---@return number timeConfidence Enhanced confidence percentage (0-100)
+function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
+  if not bestTime then
+    return nil, 0
+  end
+
+  -- Phase 1: Select best calculation method adaptively
+  local methodInfo = self:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
+
+  -- Calculate using selected method
+  local timeDelta, baseConfidence = self:CalculateTimeDeltaUsingMethod(
+    methodInfo.name, currentRun, bestTime, elapsedTime)
+
+  -- Phase 4: Apply learning-based confidence adjustment
+  local enhancedConfidence = self:CalculateEnhancedConfidence(
+    baseConfidence, methodInfo, currentRun, bestTime, elapsedTime)
+
+  -- Phase 4: Apply ensemble forecasting for high accuracy
+  if enhancedConfidence >= 60 then
+    local ensembleResults = self:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
+    if ensembleResults then
+      -- Blend results based on confidence level
+      local blendRatio = (enhancedConfidence - 60) / 40 -- 0 to 1 scale
+      timeDelta = timeDelta * (1 - blendRatio) + ensembleResults.timeDelta * blendRatio
+      enhancedConfidence = math.min(100, enhancedConfidence + ensembleResults.confidenceBonus)
+    end
+  end
+
+  -- Phase 1: Apply display smoothing
+  if ADAPTIVE_METHOD_CONFIG.smoothing.enabled then
+    timeDelta = self:ApplyDisplaySmoothing("timeDelta", timeDelta)
+    enhancedConfidence = self:ApplyDisplaySmoothing("confidence", enhancedConfidence)
+  end
+
+  -- Track method performance for learning
+  self:TrackMethodPerformance(methodInfo.name, timeDelta, enhancedConfidence, currentRun)
+
+  PushMaster:DebugPrint(string.format(
+    "Enhanced Time Delta: %s method -> %+.0fs delta (%.0f%% confidence, ensemble applied: %s)",
+    methodInfo.name, timeDelta, enhancedConfidence,
+    enhancedConfidence >= 60 and "yes" or "no"))
+
+  return timeDelta, enhancedConfidence
+end
+
+---NEW: Phase 2 - Enhanced Calculate Intelligent Pace with Dynamic Weights
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return table paceData Enhanced pace calculation data
+function Calculator:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
+  -- Calculate individual deltas
   local trashDelta = self:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
-
-  -- PRECISE BOSS TIMING
-  -- Compare actual boss kill timing vs best run
   local bossDelta = self:CalculateBossDelta(currentRun, bestTime, elapsedTime)
-
-  -- PRECISE DEATH COMPARISON
-  -- Compare death count at this time vs best run
   local deathDelta = self:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
+  local bossTimingEfficiency = self:CalculateBossTimingEfficiency(currentRun, bestTime, elapsedTime)
 
-  -- OVERALL EFFICIENCY CALCULATION
-  -- Combine trash and boss performance with learned weights
-  local efficiency = self:CalculateOverallEfficiency(trashDelta, bossDelta, currentRun, bestTime, elapsedTime)
+  -- Phase 2: Calculate dynamic weights instead of static weights
+  local dynamicWeights = self:CalculateDynamicEfficiencyWeights(currentRun, bestTime, elapsedTime)
+
+  -- Phase 3: Calculate adaptive boss weighting
+  local adaptiveBossWeights = self:CalculateAdaptiveBossWeighting(bestTime, currentRun, elapsedTime)
+
+  -- Calculate weighted efficiency using dynamic weights
+  local efficiency = 0
+
+  -- Trash component with dynamic weighting
+  efficiency = efficiency + (trashDelta * dynamicWeights.trashWeight)
+
+  -- Boss timing component with dynamic weighting
+  efficiency = efficiency + (bossTimingEfficiency * dynamicWeights.bossTimingWeight)
+
+  -- Boss count component with adaptive weighting
+  local adaptiveBossCountImpact = self:CalculateAdaptiveBossCountImpact(
+    bossDelta, currentRun, bestTime, elapsedTime, adaptiveBossWeights)
+  efficiency = efficiency + (adaptiveBossCountImpact * dynamicWeights.bossCountWeight)
+
+  -- Apply death penalty impact
+  local currentDeathTimePenalty = currentRun.progress.timeLostToDeaths or 0
+  local bestRunDeathTimePenalty = self:CalculateBestRunDeathPenalty(bestTime, elapsedTime)
+
+  local deathTimeDelta = currentDeathTimePenalty - bestRunDeathTimePenalty
+  local deathImpact = 0
+  if bestTime.time > 0 then
+    deathImpact = -(deathTimeDelta / bestTime.time) * 100
+    efficiency = efficiency + deathImpact
+  end
+
+  -- Phase 4: Apply learning factor
+  efficiency = self:ApplyEnhancedLearningFactor(efficiency, currentRun, bestTime, elapsedTime)
+
+  -- Cap to reasonable bounds
+  efficiency = math.max(-100, math.min(100, efficiency))
+
+  PushMaster:DebugPrint(string.format(
+    "Enhanced Intelligent Pace: Trash %.1f%% (w=%.2f), BossTiming %.1f%% (w=%.2f), BossCount %.1f%% (w=%.2f), Deaths %.1f%%, Final %.1f%%",
+    trashDelta, dynamicWeights.trashWeight,
+    bossTimingEfficiency, dynamicWeights.bossTimingWeight,
+    adaptiveBossCountImpact, dynamicWeights.bossCountWeight,
+    deathImpact, efficiency))
 
   return {
     efficiency = efficiency,
     trashDelta = trashDelta,
     bossDelta = bossDelta,
-    deathDelta = deathDelta
+    deathDelta = deathDelta,
+    bossTimingEfficiency = bossTimingEfficiency,
+    adaptiveBossCountImpact = adaptiveBossCountImpact,
+    deathImpact = deathImpact,
+    weights = dynamicWeights,
+    bossWeights = adaptiveBossWeights
   }
 end
 
@@ -1452,6 +2124,424 @@ function Calculator:GetSavedVariablesStats()
   return stats
 end
 
+---NEW: Helper function to calculate time delta using specific method
+---@param method string The calculation method to use
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number timeDelta Time difference in seconds
+---@return number confidence Base confidence level
+function Calculator:CalculateTimeDeltaUsingMethod(method, currentRun, bestTime, elapsedTime)
+  local currentTrash = currentRun.progress.trash
+  local currentBosses = currentRun.progress.bosses
+  local bestRunTimeAtSimilarProgress = nil
+  local confidence = 50 -- Base confidence
+
+  if method == "trash_interpolation" then
+    -- Enhanced interpolation with better precision
+    local trashSamples = bestTime.trashSamples or {}
+    local lower = { time = 0, trash = 0 }
+    local upper = { time = bestTime.time, trash = 100 }
+
+    for _, sample in ipairs(trashSamples) do
+      if sample.trash <= currentTrash and sample.trash >= lower.trash then
+        lower = sample
+      elseif sample.trash >= currentTrash and sample.trash <= upper.trash then
+        upper = sample
+      end
+    end
+
+    if upper.time > lower.time and upper.trash > lower.trash then
+      local trashProgress = (currentTrash - lower.trash) / (upper.trash - lower.trash)
+      bestRunTimeAtSimilarProgress = lower.time + (upper.time - lower.time) * trashProgress
+      confidence = 85
+    end
+  elseif method == "weighted_interpolation" then
+    -- Time-weighted average of nearby trash points
+    local trashSamples = bestTime.trashSamples or {}
+    local totalWeight = 0
+    local weightedTime = 0
+
+    for _, sample in ipairs(trashSamples) do
+      local trashDiff = math.abs(sample.trash - currentTrash)
+      if trashDiff <= 10 then              -- Within 10% trash difference
+        local weight = 1 / (trashDiff + 1) -- Higher weight for closer matches
+        totalWeight = totalWeight + weight
+        weightedTime = weightedTime + (sample.time * weight)
+      end
+    end
+
+    if totalWeight > 0 then
+      bestRunTimeAtSimilarProgress = weightedTime / totalWeight
+      confidence = 75
+    end
+  elseif method == "boss_count" then
+    -- Boss count method
+    if currentBosses > 0 and bestTime.bossKillTimes and currentBosses <= #bestTime.bossKillTimes then
+      local bossKill = bestTime.bossKillTimes[currentBosses]
+      if bossKill and bossKill.killTime then
+        bestRunTimeAtSimilarProgress = bossKill.killTime
+        confidence = 60
+      end
+    end
+  else -- proportional_estimate
+    local estimatedProgress = math.max(currentTrash / 100, currentBosses / 4)
+    estimatedProgress = math.min(estimatedProgress, 0.95)
+    bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
+    confidence = 30
+  end
+
+  if not bestRunTimeAtSimilarProgress then
+    return nil, 0
+  end
+
+  local timeDelta = elapsedTime - bestRunTimeAtSimilarProgress
+  return timeDelta, confidence
+end
+
+---NEW: Calculate enhanced confidence using learning data
+---@param baseConfidence number Base confidence from method
+---@param methodInfo table Information about selected method
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number enhancedConfidence Enhanced confidence level
+function Calculator:CalculateEnhancedConfidence(baseConfidence, methodInfo, currentRun, bestTime, elapsedTime)
+  local confidence = baseConfidence
+
+  -- Base confidence on run progress
+  local progressRatio = elapsedTime / bestTime.time
+  progressRatio = math.max(0, math.min(1, progressRatio))
+
+  -- Progress-based confidence scaling
+  if progressRatio < 0.1 then
+    confidence = confidence * 0.6 -- Very early, reduce confidence
+  elseif progressRatio < 0.3 then
+    confidence = confidence * 0.8 -- Early run
+  elseif progressRatio > 0.7 then
+    confidence = confidence * 1.2 -- Late run, boost confidence
+  end
+
+  -- Method quality bonus
+  confidence = confidence + (methodInfo.confidence or 0)
+
+  -- Historical accuracy adjustment (Phase 4 Learning)
+  local methodAccuracy = adaptiveState.methodAccuracy[methodInfo.name]
+  if methodAccuracy and methodAccuracy.avgAccuracy then
+    local accuracyBonus = (methodAccuracy.avgAccuracy - 0.7) * 30 -- Scale 70%+ accuracy to bonus
+    confidence = confidence + accuracyBonus
+  end
+
+  -- Data quality considerations
+  local trashSamples = bestTime.trashSamples or {}
+  if #trashSamples > 15 then
+    confidence = confidence + 10 -- Good data quality bonus
+  elseif #trashSamples < 5 then
+    confidence = confidence - 15 -- Poor data quality penalty
+  end
+
+  return math.max(10, math.min(100, confidence))
+end
+
+---NEW: Calculate ensemble forecast combining multiple methods
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return table|nil ensembleResults Combined forecast results
+function Calculator:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
+  local methods = { "trash_interpolation", "weighted_interpolation", "boss_count", "proportional_estimate" }
+  local results = {}
+  local totalWeight = 0
+
+  -- Calculate results from multiple methods
+  for _, method in ipairs(methods) do
+    local timeDelta, confidence = self:CalculateTimeDeltaUsingMethod(method, currentRun, bestTime, elapsedTime)
+    if timeDelta and confidence > 20 then -- Only use reasonable confidence methods
+      local weight = confidence / 100
+      table.insert(results, {
+        timeDelta = timeDelta,
+        weight = weight,
+        method = method
+      })
+      totalWeight = totalWeight + weight
+    end
+  end
+
+  if #results < 2 or totalWeight == 0 then
+    return nil -- Need at least 2 methods for ensemble
+  end
+
+  -- Calculate weighted average
+  local weightedTimeDelta = 0
+  for _, result in ipairs(results) do
+    weightedTimeDelta = weightedTimeDelta + (result.timeDelta * result.weight / totalWeight)
+  end
+
+  -- Calculate ensemble confidence bonus
+  local agreementBonus = 0
+  local deltaVariance = 0
+  for _, result in ipairs(results) do
+    deltaVariance = deltaVariance + math.abs(result.timeDelta - weightedTimeDelta)
+  end
+  deltaVariance = deltaVariance / #results
+
+  -- Lower variance = higher agreement = higher confidence bonus
+  if deltaVariance < 30 then -- Methods agree within 30 seconds
+    agreementBonus = 15
+  elseif deltaVariance < 60 then
+    agreementBonus = 8
+  else
+    agreementBonus = 2
+  end
+
+  return {
+    timeDelta = weightedTimeDelta,
+    confidenceBonus = agreementBonus,
+    methodCount = #results,
+    variance = deltaVariance
+  }
+end
+
+---NEW: Apply display smoothing to reduce flickering
+---@param valueType string Type of value being smoothed
+---@param newValue number New calculated value
+---@return number smoothedValue Smoothed value
+function Calculator:ApplyDisplaySmoothing(valueType, newValue)
+  if not ADAPTIVE_METHOD_CONFIG.smoothing.enabled then
+    return newValue
+  end
+
+  local smoothingWindow = adaptiveState.smoothingWindow[valueType] or {}
+  local lastValues = adaptiveState.lastCalculatedValues[valueType] or {}
+
+  -- Add new value to window
+  table.insert(smoothingWindow, newValue)
+
+  -- Maintain window size
+  local windowSize = ADAPTIVE_METHOD_CONFIG.smoothing.windowSize
+  while #smoothingWindow > windowSize do
+    table.remove(smoothingWindow, 1)
+  end
+
+  -- Calculate weighted average with decay
+  local totalWeight = 0
+  local weightedSum = 0
+  local decay = ADAPTIVE_METHOD_CONFIG.smoothing.weightDecay
+
+  for i = #smoothingWindow, 1, -1 do
+    local weight = math.pow(decay, #smoothingWindow - i)
+    totalWeight = totalWeight + weight
+    weightedSum = weightedSum + (smoothingWindow[i] * weight)
+  end
+
+  local smoothedValue = totalWeight > 0 and (weightedSum / totalWeight) or newValue
+
+  -- Store for next iteration
+  adaptiveState.smoothingWindow[valueType] = smoothingWindow
+  adaptiveState.lastCalculatedValues[valueType] = smoothedValue
+
+  return smoothedValue
+end
+
+---NEW: Track method performance for learning
+---@param methodName string Name of the method used
+---@param timeDelta number Calculated time delta
+---@param confidence number Confidence level
+---@param currentRun table Current run data
+function Calculator:TrackMethodPerformance(methodName, timeDelta, confidence, currentRun)
+  if not adaptiveState.methodAccuracy[methodName] then
+    adaptiveState.methodAccuracy[methodName] = {
+      uses = 0,
+      totalAccuracy = 0,
+      avgAccuracy = 0,
+      lastUpdated = GetTime()
+    }
+  end
+
+  local method = adaptiveState.methodAccuracy[methodName]
+  method.uses = method.uses + 1
+  method.lastUpdated = GetTime()
+
+  -- For now, just track usage. In a full implementation, this would
+  -- compare predictions against actual outcomes at run completion
+
+  -- Placeholder accuracy calculation based on confidence
+  -- In practice, this would be calculated after run completion
+  if confidence and confidence > 0 then
+    local estimatedAccuracy = confidence / 100
+    method.totalAccuracy = method.totalAccuracy + estimatedAccuracy
+    method.avgAccuracy = method.totalAccuracy / method.uses
+  else
+    -- If no confidence data, don't update accuracy metrics
+    -- Just track usage count
+  end
+end
+
+---NEW: Calculate boss timing consistency for dynamic weighting
+---@param bossKillTimes table Boss kill times data
+---@return number consistency Consistency score (0-1)
+function Calculator:CalculateBossTimingConsistency(bossKillTimes)
+  if #bossKillTimes < 2 then
+    return 0
+  end
+
+  -- Calculate variance in boss spacing
+  local spacings = {}
+  for i = 2, #bossKillTimes do
+    local spacing = bossKillTimes[i].killTime - bossKillTimes[i - 1].killTime
+    table.insert(spacings, spacing)
+  end
+
+  if #spacings == 0 then
+    return 0
+  end
+
+  local avgSpacing = 0
+  for _, spacing in ipairs(spacings) do
+    avgSpacing = avgSpacing + spacing
+  end
+  avgSpacing = avgSpacing / #spacings
+
+  local variance = 0
+  for _, spacing in ipairs(spacings) do
+    variance = variance + math.pow(spacing - avgSpacing, 2)
+  end
+  variance = variance / #spacings
+
+  local stdDev = math.sqrt(variance)
+  local consistency = math.max(0, 1 - (stdDev / avgSpacing))
+
+  return consistency
+end
+
+---NEW: Estimate boss fight duration for adaptive weighting
+---@param bossKill table Boss kill data
+---@param allBossKills table All boss kill times
+---@param bossIndex number Index of this boss
+---@return number duration Estimated fight duration
+function Calculator:EstimateBossFightDuration(bossKill, allBossKills, bossIndex)
+  local killTime = bossKill.killTime
+  local startTime = 0
+
+  -- Estimate when fight started (previous boss kill time or start of run)
+  if bossIndex > 1 and allBossKills[bossIndex - 1] then
+    startTime = allBossKills[bossIndex - 1].killTime
+  end
+
+  -- Assume 80% of time between bosses is travel/trash, 20% is fight
+  local timeBetween = killTime - startTime
+  local estimatedFightDuration = timeBetween * 0.2
+
+  -- Clamp to reasonable bounds (10s minimum, 300s maximum)
+  return math.max(10, math.min(300, estimatedFightDuration))
+end
+
+---NEW: Estimate boss difficulty for adaptive weighting
+---@param bossIndex number Index of boss (1-based)
+---@param totalBosses number Total number of bosses
+---@return string difficulty Difficulty level ("mini", "standard", "final")
+function Calculator:EstimateBossDifficulty(bossIndex, totalBosses)
+  if bossIndex == totalBosses then
+    return "final"
+  elseif totalBosses >= 4 and bossIndex == 1 then
+    return "mini" -- First boss in 4+ boss dungeon often easier
+  else
+    return "standard"
+  end
+end
+
+---NEW: Calculate boss timing variance for consistency weighting
+---@param bossKill table Specific boss kill data
+---@param allBossKills table All boss kill times
+---@return number variance Timing variance score
+function Calculator:CalculateBossTimingVariance(bossKill, allBossKills)
+  -- Simple implementation: return fixed variance based on position
+  -- In practice, this would analyze historical data for this boss
+  local avgVariance = 15 -- Assume 15 second average variance
+  return avgVariance
+end
+
+---NEW: Get current pace efficiency for adaptive adjustments
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number efficiency Current efficiency vs best run
+function Calculator:GetCurrentPaceEfficiency(currentRun, bestTime, elapsedTime)
+  local expectedTime = (currentRun.progress.trash / 100) * bestTime.time
+  local efficiency = (expectedTime - elapsedTime) / bestTime.time * 100
+  return efficiency
+end
+
+---NEW: Calculate adaptive boss count impact using boss weights
+---@param bossDelta number Raw boss count delta
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@param bossWeights table Adaptive boss weights
+---@return number impact Weighted boss count impact
+function Calculator:CalculateAdaptiveBossCountImpact(bossDelta, currentRun, bestTime, elapsedTime, bossWeights)
+  if bossDelta == 0 then
+    return 0
+  end
+
+  -- Use average boss weight if specific weights not available
+  local avgWeight = 1.0
+  if bossWeights and type(bossWeights) == "table" then
+    local totalWeight = 0
+    local weightCount = 0
+    for _, weight in pairs(bossWeights) do
+      if type(weight) == "number" then
+        totalWeight = totalWeight + weight
+        weightCount = weightCount + 1
+      end
+    end
+    if weightCount > 0 then
+      avgWeight = totalWeight / weightCount
+    end
+  end
+
+  -- Each boss ahead/behind has impact scaled by average weight
+  local baseImpact = bossDelta * 5 -- 5% impact per boss difference
+  return baseImpact * avgWeight
+end
+
+---NEW: Calculate best run death penalty at elapsed time
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number penalty Total death time penalty from best run
+function Calculator:CalculateBestRunDeathPenalty(bestTime, elapsedTime)
+  local penalty = 0
+  local deathTimes = bestTime.deathTimes or {}
+
+  for _, deathTime in ipairs(deathTimes) do
+    if deathTime <= elapsedTime then
+      penalty = penalty + 15 -- 15 second penalty per death
+    end
+  end
+
+  return penalty
+end
+
+---NEW: Apply enhanced learning factor with pattern recognition
+---@param baseEfficiency number Base calculated efficiency
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number adjustedEfficiency Learning-adjusted efficiency
+function Calculator:ApplyEnhancedLearningFactor(baseEfficiency, currentRun, bestTime, elapsedTime)
+  -- For now, return base efficiency with minimal learning adjustment
+  -- Future enhancement: Pattern recognition for route changes, etc.
+
+  local learningAdjustment = 0
+
+  -- Simple learning: slightly boost confidence if we have historical data
+  if adaptiveState.recentRuns and #adaptiveState.recentRuns > 5 then
+    learningAdjustment = 2 -- Small bonus for having learning data
+  end
+
+  return baseEfficiency + learningAdjustment
+end
+
 ---Calculate time delta and confidence
 ---@param currentRun table Current run data
 ---@param bestTime table Best time data
@@ -1459,15 +2549,72 @@ end
 ---@param progressEfficiency number Calculated progress efficiency
 ---@return number timeDelta Time difference in seconds (positive = behind, negative = ahead)
 ---@return number timeConfidence Confidence percentage (0-100)
-function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
-  if not bestTime or not progressEfficiency then
+function Calculator:CalculateTimeDelta_Legacy(currentRun, bestTime, elapsedTime, progressEfficiency)
+  if not bestTime then
     return nil, 0 -- No data available
   end
 
-  -- Method 1: Efficiency-based projection
-  -- If we're +15% efficient, we should finish 15% faster
-  local projectedTotalTime = bestTime.time * (1 - (progressEfficiency / 100))
-  local timeDelta = projectedTotalTime - bestTime.time
+  -- Method: Direct pace comparison based on current progress
+  -- Find what time the best run had at our current progress level
+  local currentTrash = currentRun.progress.trash
+  local currentBosses = currentRun.progress.bosses
+
+  -- Find the best run's time when it had similar progress
+  local bestRunTimeAtSimilarProgress = nil
+  local calculationMethod = "none"
+  local methodDetails = ""
+
+  -- First try to match by trash percentage (most accurate for most of the run)
+  if bestTime.trashSamples and #bestTime.trashSamples > 0 then
+    -- Use interpolation for more accurate results instead of just finding first match
+    local lower = { time = 0, trash = 0 }
+    local upper = { time = bestTime.time, trash = 100 }
+
+    for _, sample in ipairs(bestTime.trashSamples) do
+      if sample.trash <= currentTrash and sample.trash >= lower.trash then
+        lower = sample
+      elseif sample.trash >= currentTrash and sample.trash <= upper.trash then
+        upper = sample
+      end
+    end
+
+    -- Interpolate between samples for smoother calculation
+    if upper.time > lower.time and upper.trash > lower.trash then
+      local trashProgress = (currentTrash - lower.trash) / (upper.trash - lower.trash)
+      bestRunTimeAtSimilarProgress = lower.time + (upper.time - lower.time) * trashProgress
+      calculationMethod = "trash_interpolation"
+      methodDetails = string.format("%.1f%% between samples at %.1fs-%.1fs", currentTrash, lower.time, upper.time)
+    elseif lower.trash == currentTrash then
+      bestRunTimeAtSimilarProgress = lower.time
+      calculationMethod = "trash_exact"
+      methodDetails = string.format("%.1f%% exact match at %.1fs", currentTrash, lower.time)
+    end
+  end
+
+  -- If we couldn't match by trash, try to match by boss count
+  if not bestRunTimeAtSimilarProgress and bestTime.bossKillTimes then
+    if currentBosses > 0 and currentBosses <= #bestTime.bossKillTimes then
+      local bossKill = bestTime.bossKillTimes[currentBosses]
+      if bossKill and bossKill.killTime then
+        bestRunTimeAtSimilarProgress = bossKill.killTime
+        calculationMethod = "boss_count"
+        methodDetails = string.format("%d bosses at %.1fs", currentBosses, bossKill.killTime)
+      end
+    end
+  end
+
+  -- If we still don't have a comparison point, fall back to proportional estimate
+  if not bestRunTimeAtSimilarProgress then
+    -- Estimate based on overall completion percentage
+    local estimatedProgress = math.max(currentTrash / 100, currentBosses / 4) -- Assume 4 bosses max
+    estimatedProgress = math.min(estimatedProgress, 0.95)                     -- Cap at 95% to avoid division issues
+    bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
+    calculationMethod = "proportional"
+    methodDetails = string.format("%.1f%% estimated progress", estimatedProgress * 100)
+  end
+
+  -- Calculate direct time difference at this progress point
+  local timeDelta = elapsedTime - bestRunTimeAtSimilarProgress
 
   -- Calculate confidence based on run progress and data quality
   local confidence = 0
@@ -1487,20 +2634,393 @@ function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progre
     confidence = 90 -- Late run, high confidence
   end
 
-  -- Reduce confidence if efficiency is extreme (likely inaccurate)
-  local efficiencyMagnitude = math.abs(progressEfficiency)
-  if efficiencyMagnitude > 50 then
-    confidence = confidence * 0.5 -- Very extreme efficiency, reduce confidence
-  elseif efficiencyMagnitude > 25 then
-    confidence = confidence * 0.8 -- Moderate extreme efficiency
+  -- Adjust confidence based on calculation method
+  if calculationMethod == "trash_interpolation" then
+    confidence = math.min(100, confidence + 15) -- Highest confidence
+  elseif calculationMethod == "trash_exact" then
+    confidence = math.min(100, confidence + 10) -- High confidence
+  elseif calculationMethod == "boss_count" then
+    confidence = math.max(20, confidence - 10)  -- Lower confidence
+  else                                          -- proportional
+    confidence = math.max(10, confidence - 20)  -- Lowest confidence
+  end
+
+  -- Boost confidence if we have good trash sample data
+  if bestTime.trashSamples and #bestTime.trashSamples > 10 then
+    confidence = math.min(100, confidence + 5)
+  end
+
+  -- Reduce confidence if time delta is extremely large (likely inaccurate)
+  local deltaMinutes = math.abs(timeDelta) / 60
+  if deltaMinutes > 10 then
+    confidence = confidence * 0.3 -- Very extreme delta, likely calculation error
+  elseif deltaMinutes > 5 then
+    confidence = confidence * 0.7 -- Large delta, reduce confidence
   end
 
   -- Ensure confidence is within bounds
   confidence = math.max(0, math.min(100, confidence))
 
+  -- Enhanced debug logging with method information
   PushMaster:DebugPrint(string.format(
-    "Time Delta: %.1f%% efficiency -> %+.0fs delta (%.0f%% confidence)",
-    progressEfficiency, timeDelta, confidence))
+    "Time Delta: %s method (%s) -> %+.0fs delta vs best run (%.0f%% confidence)",
+    calculationMethod, methodDetails, timeDelta, confidence))
 
   return timeDelta, confidence
 end
+
+---PERFORMANCE OPTIMIZED: Calculate intelligent pace with enhanced caching
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return table paceData Pace calculation result
+function Calculator:CalculateIntelligentPaceOptimized(currentRun, bestTime, elapsedTime)
+  -- PERFORMANCE: Check dynamic weights cache first
+  local cacheKey = string.format("weights_%d_%.1f_%.1f",
+    currentRun.progress.trash, currentRun.progress.bosses, elapsedTime)
+
+  local cached = performanceCache.dynamicWeights[cacheKey]
+  if cached and (GetTime() - cached.timestamp) < 5.0 then -- 5 second cache
+    -- Use cached weights to calculate deltas
+    local trashDelta = cached.trashWeight > 0 and self:CalculateTrashDelta(currentRun, bestTime) or 0
+    local bossDelta = cached.bossWeight > 0 and self:CalculateBossDelta(currentRun, bestTime) or 0
+    local deathDelta = cached.deathWeight > 0 and self:CalculateDeathDelta(currentRun, bestTime) or 0
+
+    local efficiency = (trashDelta * cached.trashWeight) +
+        (bossDelta * cached.bossWeight) +
+        (deathDelta * cached.deathWeight)
+
+    return {
+      efficiency = efficiency,
+      trashDelta = trashDelta,
+      bossDelta = bossDelta,
+      deathDelta = deathDelta,
+      weights = cached.weights
+    }
+  end
+
+  -- PERFORMANCE: Simplified dynamic weights calculation
+  local progressRatio = math.min(currentRun.progress.trash / 100, 1.0)
+  local weights = {
+    trash = 0.4 + (progressRatio * 0.3), -- 40% to 70% based on progress
+    boss = 0.3 - (progressRatio * 0.1),  -- 30% to 20% based on progress
+    death = 0.3                          -- Constant 30%
+  }
+
+  -- Normalize weights to sum to 1.0
+  local total = weights.trash + weights.boss + weights.death
+  weights.trash = weights.trash / total
+  weights.boss = weights.boss / total
+  weights.death = weights.death / total
+
+  -- Calculate deltas
+  local trashDelta = self:CalculateTrashDelta(currentRun, bestTime)
+  local bossDelta = self:CalculateBossDelta(currentRun, bestTime)
+  local deathDelta = self:CalculateDeathDelta(currentRun, bestTime)
+
+  local efficiency = (trashDelta * weights.trash) +
+      (bossDelta * weights.boss) +
+      (deathDelta * weights.death)
+
+  -- Cache the result
+  performanceCache.dynamicWeights[cacheKey] = {
+    trashWeight = weights.trash,
+    bossWeight = weights.boss,
+    deathWeight = weights.death,
+    weights = weights,
+    timestamp = GetTime()
+  }
+
+  return {
+    efficiency = efficiency,
+    trashDelta = trashDelta,
+    bossDelta = bossDelta,
+    deathDelta = deathDelta,
+    weights = weights
+  }
+end
+
+---PERFORMANCE OPTIMIZED: Calculate time delta with enhanced performance
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@param efficiency number|nil Current efficiency score
+---@return number, number timeDelta, confidence
+function Calculator:CalculateTimeDeltaOptimized(currentRun, bestTime, elapsedTime, efficiency)
+  if not bestTime or not bestTime.progress then
+    return 0, 0
+  end
+
+  -- PERFORMANCE: Check cache first
+  local cacheKey = string.format("delta_%.1f_%.1f_%d",
+    elapsedTime, currentRun.progress.trash, currentRun.progress.bosses)
+
+  local cached = performanceCache.timeDelta[cacheKey]
+  if cached and (GetTime() - cached.timestamp) < 3.0 then -- 3 second cache
+    return cached.delta, cached.confidence
+  end
+
+  local currentProgress = currentRun.progress.trash
+  local currentBosses = currentRun.progress.bosses
+
+  -- Simple interpolation method for performance
+  local bestProgress = bestTime.progress
+  local interpolatedTime = 0
+  local confidence = 50 -- Base confidence
+
+  if bestProgress and #bestProgress > 0 then
+    -- Find closest progress points
+    local closestBefore, closestAfter = nil, nil
+
+    for _, sample in ipairs(bestProgress) do
+      if sample.trash <= currentProgress then
+        if not closestBefore or sample.trash > closestBefore.trash then
+          closestBefore = sample
+        end
+      else
+        if not closestAfter or sample.trash < closestAfter.trash then
+          closestAfter = sample
+        end
+      end
+    end
+
+    -- Interpolate between closest points
+    if closestBefore and closestAfter then
+      local ratio = (currentProgress - closestBefore.trash) / (closestAfter.trash - closestBefore.trash)
+      interpolatedTime = closestBefore.time + (ratio * (closestAfter.time - closestBefore.time))
+      confidence = 75 -- Good interpolation
+    elseif closestBefore then
+      interpolatedTime = closestBefore.time
+      confidence = 60 -- Extrapolation
+    elseif closestAfter then
+      interpolatedTime = closestAfter.time
+      confidence = 40 -- Early extrapolation
+    end
+  end
+
+  local timeDelta = elapsedTime - interpolatedTime
+
+  -- Apply efficiency adjustment if available
+  if efficiency and efficiency ~= 0 then
+    local efficiencyFactor = 1.0 + ((efficiency - 100) / 200) -- Convert efficiency to multiplier
+    timeDelta = timeDelta * efficiencyFactor
+    confidence = math.min(confidence + 10, 95)                -- Bonus confidence for efficiency data
+  end
+
+  -- Cache the result
+  performanceCache.timeDelta[cacheKey] = {
+    delta = timeDelta,
+    confidence = confidence,
+    timestamp = GetTime()
+  }
+
+  return timeDelta, confidence
+end
+
+---PERFORMANCE OPTIMIZED: Calculate boss timing efficiency with limited processing
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@return number efficiency Timing efficiency percentage
+function Calculator:CalculateBossTimingEfficiencyOptimized(currentRun, bestTime)
+  if not bestTime or not bestTime.bosses or not currentRun.bosses then
+    return 100
+  end
+
+  local totalEfficiency = 0
+  local bossCount = 0
+  local maxBossesToProcess = 3 -- PERFORMANCE: Limit processing to 3 bosses
+
+  for i = 1, math.min(#currentRun.bosses, #bestTime.bosses, maxBossesToProcess) do
+    local currentBoss = currentRun.bosses[i]
+    local bestBoss = bestTime.bosses[i]
+
+    if currentBoss.killTime and bestBoss.killTime then
+      local timeDiff = currentBoss.killTime - bestBoss.killTime
+      local efficiency = 100 - (timeDiff / bestBoss.killTime * 100)
+      totalEfficiency = totalEfficiency + math.max(0, math.min(200, efficiency))
+      bossCount = bossCount + 1
+    end
+  end
+
+  return bossCount > 0 and totalEfficiency / bossCount or 100
+end
+
+---PERFORMANCE OPTIMIZED: Calculate dynamic efficiency weights with simplified logic
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@return table weights Dynamic weight configuration
+function Calculator:CalculateDynamicEfficiencyWeightsOptimized(currentRun, bestTime)
+  local progressRatio = math.min(currentRun.progress.trash / 100, 1.0)
+
+  -- Simplified weight determination based on progress
+  local baseWeights
+  if progressRatio < 0.3 then
+    -- Early run: Focus on trash and boss timing
+    baseWeights = { trash = 0.5, boss = 0.4, death = 0.1 }
+  elseif progressRatio < 0.7 then
+    -- Mid run: Balanced approach
+    baseWeights = { trash = 0.4, boss = 0.3, death = 0.3 }
+  else
+    -- Late run: Focus on completion and deaths
+    baseWeights = { trash = 0.3, boss = 0.2, death = 0.5 }
+  end
+
+  -- PERFORMANCE: Simple data quality adjustment
+  local dataQuality = 1.0
+  if bestTime and bestTime.totalTime then
+    dataQuality = math.min(1.2, 1.0 + (bestTime.completionCount or 0) * 0.1)
+  end
+
+  -- Apply data quality factor
+  for key, weight in pairs(baseWeights) do
+    baseWeights[key] = weight * dataQuality
+  end
+
+  -- Normalize to sum to 1.0
+  local total = baseWeights.trash + baseWeights.boss + baseWeights.death
+  for key, weight in pairs(baseWeights) do
+    baseWeights[key] = weight / total
+  end
+
+  return baseWeights
+end
+
+---PERFORMANCE: Clean up old cache entries to prevent memory leaks
+---@param maxAge number Maximum age in seconds for cache entries
+local function cleanupPerformanceCache(maxAge)
+  local currentTime = GetTime()
+  maxAge = maxAge or 300 -- Default 5 minutes
+
+  -- Known configuration keys that should not be cleaned up
+  local configKeys = {
+    data = true,
+    validityDuration = true,
+    lastProgressPhase = true,
+    bestTimeHash = true,
+    validUntilProgress = true,
+    lastElapsedTime = true,
+    timestamp = true,
+    confidence = true
+  }
+
+  -- Clean up dynamic weights cache
+  for key, entry in pairs(performanceCache.dynamicWeights) do
+    if not configKeys[key] and type(entry) == "table" and entry.timestamp and currentTime - entry.timestamp > maxAge then
+      performanceCache.dynamicWeights[key] = nil
+    end
+  end
+
+  -- Clean up time delta cache
+  for key, entry in pairs(performanceCache.timeDelta) do
+    if not configKeys[key] and type(entry) == "table" and entry.timestamp and currentTime - entry.timestamp > maxAge then
+      performanceCache.timeDelta[key] = nil
+    end
+  end
+
+  -- Clean up boss weighting cache
+  for key, entry in pairs(performanceCache.bossWeighting) do
+    if not configKeys[key] and type(entry) == "table" and entry.timestamp and currentTime - entry.timestamp > maxAge then
+      performanceCache.bossWeighting[key] = nil
+    end
+  end
+
+  -- Clean up ensemble cache
+  for key, entry in pairs(performanceCache.ensembleResults) do
+    if not configKeys[key] and type(entry) == "table" and entry.timestamp and currentTime - entry.timestamp > maxAge then
+      performanceCache.ensembleResults[key] = nil
+    end
+  end
+
+  -- Clean up method selection cache
+  for key, entry in pairs(performanceCache.methodSelection) do
+    if not configKeys[key] and type(entry) == "table" and entry.timestamp and currentTime - entry.timestamp > maxAge then
+      performanceCache.methodSelection[key] = nil
+    end
+  end
+end
+
+---PERFORMANCE: Monitor and report performance metrics
+local function reportPerformanceMetrics()
+  if not PERFORMANCE_CONFIG.enablePerformanceMonitoring then
+    return
+  end
+
+  local metrics = performanceMetrics
+  local avgCalculationTime = metrics.totalCalculationTime / math.max(1, metrics.calculationsThisSecond)
+
+  -- Report if performance is concerning
+  if avgCalculationTime > 0.01 or metrics.frameDropsDetected > 0 then
+    PushMaster:DebugPrint(string.format("PERFORMANCE WARNING: Avg calc time: %.3fms, Frame drops: %d, Calcs/sec: %d",
+      avgCalculationTime * 1000, metrics.frameDropsDetected, metrics.calculationsThisSecond))
+  end
+
+  -- Reset metrics for next period
+  metrics.calculationsThisSecond = 0
+  metrics.totalCalculationTime = 0
+  metrics.frameDropsDetected = 0
+  metrics.lastResetTime = GetTime()
+end
+
+---PERFORMANCE: Initialize performance monitoring
+local function initializePerformanceMonitoring()
+  -- Set up cleanup timer
+  local cleanupFrame = CreateFrame("Frame")
+  cleanupFrame:SetScript("OnUpdate", function(self, elapsed)
+    self.timer = (self.timer or 0) + elapsed
+    if self.timer >= 60 then       -- Clean up every minute
+      cleanupPerformanceCache(300) -- Remove entries older than 5 minutes
+      self.timer = 0
+    end
+  end)
+
+  -- Set up performance reporting timer
+  local reportFrame = CreateFrame("Frame")
+  reportFrame:SetScript("OnUpdate", function(self, elapsed)
+    self.timer = (self.timer or 0) + elapsed
+    if self.timer >= 30 then -- Report every 30 seconds
+      reportPerformanceMetrics()
+      self.timer = 0
+    end
+  end)
+
+  PushMaster:DebugPrint("Performance monitoring initialized")
+end
+
+---PERFORMANCE: Emergency performance mode when frame rate drops
+local function activateEmergencyPerformanceMode()
+  if performanceMetrics.emergencyModeActive then
+    return -- Already active
+  end
+
+  performanceMetrics.emergencyModeActive = true
+
+  -- Reduce calculation frequency
+  PERFORMANCE_CONFIG.maxCalculationsPerSecond = 2
+  PERFORMANCE_CONFIG.minUpdateInterval = 0.5
+
+  -- Disable debug logging
+  PERFORMANCE_CONFIG.enableDebugLogging = false
+
+  -- Clear all caches to free memory
+  performanceCache.dynamicWeights = {}
+  performanceCache.timeDelta = {}
+  performanceCache.bossWeighting = {}
+  performanceCache.ensemble = {}
+  performanceCache.methodSelection = {}
+
+  PushMaster:DebugPrint("EMERGENCY PERFORMANCE MODE ACTIVATED - calculations reduced")
+
+  -- Schedule deactivation after 2 minutes
+  C_Timer.After(120, function()
+    performanceMetrics.emergencyModeActive = false
+    PERFORMANCE_CONFIG.maxCalculationsPerSecond = 5
+    PERFORMANCE_CONFIG.minUpdateInterval = 0.2
+    PERFORMANCE_CONFIG.enableDebugLogging = true
+    PushMaster:DebugPrint("Emergency performance mode deactivated")
+  end)
+end
+
+-- Initialize performance monitoring when the module loads
+initializePerformanceMonitoring()
+
+return Calculator
