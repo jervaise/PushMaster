@@ -10,7 +10,7 @@ PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "A
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "0.9.3"
+PushMaster.version = "0.9.4"
 PushMaster.author = "Loading..."
 
 -- Debug mode flag
@@ -66,7 +66,7 @@ local function onAddonLoaded(loadedAddonName)
     -- Set up default saved variables structure
     local defaults = {
       profile = {
-        version = "0.9.3", -- Use hardcoded version for initial setup
+        version = "0.9.4", -- Use hardcoded version for initial setup
         ui = {
           mainFrame = {
             position = { point = "CENTER", x = 0, y = 0 },
@@ -93,10 +93,34 @@ local function onAddonLoaded(loadedAddonName)
       }
     }
 
-    -- Merge defaults with existing saved variables
-    if PushMasterDB then
-      PushMasterDB.profile = PushMasterDB.profile or {}
-      PushMasterDB.profile = LibStub("AceDB-3.0"):New("PushMasterDB", defaults.profile):Merge(PushMasterDB.profile)
+    -- Initialize PushMasterDB if it doesn't exist
+    if not PushMasterDB then
+      PushMasterDB = {}
+    end
+
+    -- Simple merge without AceDB-3.0 (which was causing the error)
+    if not PushMasterDB.version then
+      PushMasterDB.version = defaults.profile.version
+    end
+
+    if not PushMasterDB.settings then
+      PushMasterDB.settings = {}
+      -- Copy default settings
+      for k, v in pairs(defaults.profile.settings) do
+        PushMasterDB.settings[k] = v
+      end
+    end
+
+    if not PushMasterDB.minimap then
+      PushMasterDB.minimap = {}
+      -- Copy default minimap settings
+      for k, v in pairs(defaults.profile.ui.minimap) do
+        PushMasterDB.minimap[k] = v
+      end
+    end
+
+    if not PushMasterDB.bestTimes then
+      PushMasterDB.bestTimes = {}
     end
   end
 
@@ -130,12 +154,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "0.9.3"
+      PushMaster.version = "0.9.4"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.3"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "0.9.4"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC

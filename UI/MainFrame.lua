@@ -24,7 +24,9 @@ local lastDisplayValues = {
   trash = nil,
   boss = nil,
   death = nil,
-  keystoneHeader = nil
+  keystoneHeader = nil,
+  borderColor = nil,
+  timeDelta = nil
 }
 
 -- PERFORMANCE OPTIMIZATION: Cache last comparison data to prevent redundant calculations
@@ -38,7 +40,8 @@ local lastComparisonCache = {
 local elements = {
   displayText = nil,
   iconTextures = {},
-  keystoneHeader = nil -- NEW: Header for keystone info
+  keystoneHeader = nil, -- NEW: Header for keystone info
+  timeDelta = nil       -- NEW: Time delta display above the frame
 }
 
 -- Frame settings
@@ -60,6 +63,13 @@ local COLORS = {
   GRAY = "|cFF808080",   -- No data
   WHITE = "|cFFFFFFFF",  -- Default text
   RESET = "|r"           -- Reset color
+}
+
+-- Border colors for frame backdrop
+local BORDER_COLORS = {
+  GREEN = { 0.2, 0.8, 0.2, 1 },  -- Green tint for on par or better
+  RED = { 0.8, 0.2, 0.2, 1 },    -- Red tint for behind
+  NEUTRAL = { 0.3, 0.3, 0.3, 1 } -- Default gray
 }
 
 -- Timer for regular UI updates
@@ -131,6 +141,11 @@ end
 
 ---Create the main frame
 local function createMainFrame()
+  -- Get the player's class color
+  local playerClass = select(2, UnitClass("player"))
+  local classColor = RAID_CLASS_COLORS[playerClass] or
+      { r = 1, g = 0.82, b = 0 } -- Fallback to gold if class color not found
+
   -- Create main frame
   frame = CreateFrame("Frame", "PushMasterMainFrame", UIParent, "BackdropTemplate")
   frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
@@ -152,8 +167,14 @@ local function createMainFrame()
   elements.keystoneHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   elements.keystoneHeader:SetPoint("TOP", frame, "TOP", 0, -8)
   elements.keystoneHeader:SetJustifyH("CENTER")
-  elements.keystoneHeader:SetTextColor(1, 0.82, 0, 1) -- Gold color
+  elements.keystoneHeader:SetTextColor(classColor.r, classColor.g, classColor.b, 1) -- Use class color
   elements.keystoneHeader:SetText("Keystone Info")
+
+  -- Create time delta display above the frame
+  elements.timeDelta = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  elements.timeDelta:SetPoint("BOTTOM", frame, "TOP", 0, 5)
+  elements.timeDelta:SetJustifyH("CENTER")
+  elements.timeDelta:SetText("") -- Initially empty
 
   -- Make frame movable
   frame:SetMovable(true)
@@ -255,8 +276,8 @@ local function formatPercentage(value, isEfficiency)
     color = COLORS.RED
     sign = "" -- Negative sign is already included in the number
   else
-    -- Neutral value (exactly 0) - no sign needed
-    color = COLORS.YELLOW
+    -- Neutral value (exactly 0) - being on par with best run is good, so use green
+    color = COLORS.GREEN
     sign = ""
   end
 
@@ -285,8 +306,8 @@ local function formatBossCount(value)
     color = COLORS.RED
     sign = "" -- Negative sign is already included in the number
   else
-    -- Neutral value (exactly 0) - no sign needed
-    color = COLORS.YELLOW
+    -- Neutral value (exactly 0) - being on par with best run is good, so use green
+    color = COLORS.GREEN
     sign = ""
   end
 
@@ -322,6 +343,48 @@ local function formatDeaths(deathDelta, timePenalty)
   return color .. sign .. tostring(deathDelta) .. COLORS.RESET
 end
 
+---Format time delta with confidence interval
+---@param timeDelta number Time difference in seconds (positive = behind, negative = ahead)
+---@param confidence number Confidence percentage (0-100)
+---@return string formattedText Colored and formatted time delta with confidence
+local function formatTimeDelta(timeDelta, confidence)
+  if timeDelta == nil or confidence == nil or confidence <= 50 then
+    return "" -- Don't show if no data or low confidence (50% or below)
+  end
+
+  local color
+  local sign = ""
+  local absTime = math.abs(timeDelta)
+
+  if timeDelta > 0 then
+    -- Behind (positive delta)
+    color = COLORS.RED
+    sign = "+"
+  else
+    -- Ahead (negative delta)
+    color = COLORS.GREEN
+    sign = "-"
+  end
+
+  -- Format time as minutes:seconds or just seconds
+  local timeText
+  if absTime >= 60 then
+    local minutes = math.floor(absTime / 60)
+    local seconds = math.floor(absTime % 60)
+    timeText = string.format("%dm%02ds", minutes, seconds)
+  else
+    timeText = string.format("%ds", math.floor(absTime))
+  end
+
+  -- Add confidence indicator
+  local confidenceText = ""
+  if confidence < 70 then
+    confidenceText = " (~" .. math.floor(confidence) .. "%)"
+  end
+
+  return color .. sign .. timeText .. confidenceText .. COLORS.RESET
+end
+
 ---Update the display with current comparison data
 ---@param comparisonData table The comparison data from Calculator
 function MainFrame:UpdateDisplay(comparisonData)
@@ -342,6 +405,30 @@ function MainFrame:UpdateDisplay(comparisonData)
   local bossText = formatBossCount(comparisonData.bossProgress)
   local deathText = formatDeaths(comparisonData.deathProgress, comparisonData.deathTimePenalty)
   local keystoneText = string.format("%s +%d", comparisonData.dungeon or "Unknown", comparisonData.level or 0)
+
+  -- Update border color based on overall performance
+  local borderColor = BORDER_COLORS.NEUTRAL
+  local performanceStatus = "neutral"
+
+  if comparisonData.progressEfficiency ~= nil then
+    if comparisonData.progressEfficiency > 0 then
+      borderColor = BORDER_COLORS.GREEN
+      performanceStatus = "ahead"
+    elseif comparisonData.progressEfficiency < 0 then
+      borderColor = BORDER_COLORS.RED
+      performanceStatus = "behind"
+    else
+      -- Exactly 0 - on par with best run, which is good
+      borderColor = BORDER_COLORS.GREEN
+      performanceStatus = "onpar"
+    end
+  end
+
+  -- Only update border color if it changed
+  if performanceStatus ~= lastDisplayValues.borderColor then
+    frame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+    lastDisplayValues.borderColor = performanceStatus
+  end
 
   -- PERFORMANCE OPTIMIZATION: Only update text when it actually changes
   if overallText ~= lastDisplayValues.overall then
@@ -369,6 +456,13 @@ function MainFrame:UpdateDisplay(comparisonData)
     elements.keystoneHeader:SetText(keystoneText)
     lastDisplayValues.keystoneHeader = keystoneText
   end
+
+  -- Update time delta display only if changed
+  local timeDeltaText = formatTimeDelta(comparisonData.timeDelta, comparisonData.timeConfidence)
+  if timeDeltaText ~= lastDisplayValues.timeDelta then
+    elements.timeDelta:SetText(timeDeltaText)
+    lastDisplayValues.timeDelta = timeDeltaText
+  end
 end
 
 ---Process any pending updates after leaving combat
@@ -387,7 +481,9 @@ function MainFrame:ResetDisplayCache()
     trash = nil,
     boss = nil,
     death = nil,
-    keystoneHeader = nil
+    keystoneHeader = nil,
+    borderColor = nil,
+    timeDelta = nil
   }
   PushMaster:DebugPrint("Display cache reset")
 end

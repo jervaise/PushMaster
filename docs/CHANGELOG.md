@@ -5,6 +5,33 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2024-12-20
+
+### Added
+- **Time Delta Display**: New real-time time ahead/behind indicator above the main frame
+  - Shows estimated time saved or lost compared to best run (e.g., "-45s" = 45 seconds ahead)
+  - Intelligent confidence system based on run progress (30-90% confidence)
+  - Color-coded display: Green for ahead (-), Red for behind (+)
+  - Smart formatting: Shows minutes:seconds for times ≥60s, just seconds otherwise
+  - Confidence indicators: Shows "(~XX%)" when confidence is below 70%
+
+### Changed
+- **Time Delta Confidence Threshold**: Updated from 30% to 50% minimum confidence
+  - Time delta now only displays when confidence is above 50%
+  - Prevents showing unreliable early-run projections
+  - Ensures more accurate time estimates for users
+
+### Technical
+- **New Calculation Functions**: Added `CalculateTimeDelta()` with efficiency-based projection
+  - Uses existing `progressEfficiency` to project final completion time
+  - Formula: `projectedTime = bestTime × (1 - efficiency/100)`
+  - Confidence calculation based on run progress with adjustments for extreme efficiency values
+- **UI Enhancements**: Added `formatTimeDelta()` function with smart time formatting
+  - Positioned time delta display above main frame for clear visibility
+  - Integrated into existing update cycle with performance optimizations
+- **Data Structure Updates**: Extended comparison data to include `timeDelta` and `timeConfidence`
+  - Seamlessly integrated with existing Calculator and MainFrame systems
+
 ## [0.9.3] - 2024-12-20
 
 ### Fixed
@@ -67,7 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Interface Version**: Updated TOC interface from 110002 to 110105 for WoW 11.1.5+ compatibility
 - **Trash Milestone System**: Replaced trash samples with milestone-based tracking (5% increments)
-- **Improved Interpolation**: Enhanced ghost car calculation with milestone-based interpolation
+- **Improved Interpolation**: Enhanced best run calculation with milestone-based interpolation
 - **Better Performance**: More efficient trash progress tracking with milestone recordings
 
 ### Technical

@@ -370,7 +370,7 @@ function Calculator:UpdateProgress(progressData)
   if C_ChallengeMode and C_ChallengeMode.GetDeathCount then
     local apiDeathCount, apiTimeLost = C_ChallengeMode.GetDeathCount()
     if apiDeathCount and apiDeathCount ~= currentRun.progress.deaths then
-      -- Death count increased - record the death time for ghost car comparison
+      -- Death count increased - record the death time for best run comparison
       if apiDeathCount > currentRun.progress.deaths then
         -- Calculate how many new deaths occurred
         local newDeaths = apiDeathCount - currentRun.progress.deaths
@@ -440,7 +440,7 @@ function Calculator:RecordDeath(deathTime, playerGUID)
   end
 
   -- The primary currentRun.progress.deaths is now updated from C_ChallengeMode.GetDeathCount() in UpdateProgress.
-  -- Death times for ghost car comparison are also recorded there when API death count increases.
+  -- Death times for best run comparison are also recorded there when API death count increases.
   -- This function is now primarily for detailed logging of individual death events.
 
   PushMaster:DebugPrint("Logged death for " ..
@@ -705,6 +705,9 @@ function Calculator:GetCurrentComparison()
     -- We don't return nil here anymore, so the rest of the function will execute
   end
 
+  -- Calculate time delta and confidence
+  local timeDelta, timeConfidence = self:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
+
   -- Prepare values for the return table, applying math.floor only if not nil
   local finalProgressEfficiency = progressEfficiency
   if finalProgressEfficiency ~= nil then
@@ -754,7 +757,9 @@ function Calculator:GetCurrentComparison()
     deathProgress = finalDeathProgress,
     deathTimePenalty = deathTimePenalty,
     -- Keep for backward compatibility
-    overallSpeed = finalOverallSpeed
+    overallSpeed = finalOverallSpeed,
+    timeDelta = timeDelta,
+    timeConfidence = timeConfidence
   }
 end
 
@@ -767,8 +772,7 @@ function Calculator:CalculateIntelligentPace(currentRun, bestTime, elapsedTime)
   local currentTrash = currentRun.progress.trash
   local currentBosses = currentRun.progress.bosses
 
-  -- MILESTONE-BASED TRASH COMPARISON
-  -- Instead of linear assumptions, use actual milestone data
+  -- BEST RUN LOGIC: What trash % did the best run have at this exact time?
   local trashDelta = self:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
 
   -- PRECISE BOSS TIMING
@@ -809,8 +813,8 @@ function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
 
   local bestSamples = bestTime.trashSamples or {}
 
-  -- GHOST CAR LOGIC: What trash % did the best run have at this exact time?
-  local ghostCarTrash = 0
+  -- BEST RUN LOGIC: What trash % did the best run have at this exact time?
+  local bestRunTrash = 0
 
   if next(bestSamples) then
     -- Find the two samples that bracket the current time
@@ -829,41 +833,41 @@ function Calculator:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
       local timeDiff = upper.time - lower.time
       if timeDiff > 0 then
         local tProg = (elapsedTime - lower.time) / timeDiff
-        ghostCarTrash = lower.trash + (upper.trash - lower.trash) * tProg
+        bestRunTrash = lower.trash + (upper.trash - lower.trash) * tProg
       else
-        ghostCarTrash = lower.trash
+        bestRunTrash = lower.trash
       end
     else
       -- SAFETY: Ensure bestTime.time is not zero before division
       if bestTime.time and bestTime.time > 0 then
-        ghostCarTrash = (elapsedTime / bestTime.time) * 100
+        bestRunTrash = (elapsedTime / bestTime.time) * 100
       else
         -- Fallback: assume linear progression if no valid time data
-        ghostCarTrash = 0
+        bestRunTrash = 0
       end
     end
   else
     -- SAFETY: Ensure bestTime.time is not zero before division
     if bestTime.time and bestTime.time > 0 then
-      ghostCarTrash = (elapsedTime / bestTime.time) * 100
+      bestRunTrash = (elapsedTime / bestTime.time) * 100
     else
       -- Fallback: assume linear progression if no valid time data
-      ghostCarTrash = 0
+      bestRunTrash = 0
     end
   end
 
-  -- Cap ghost car trash to reasonable bounds
-  ghostCarTrash = math.max(0, math.min(100, ghostCarTrash))
+  -- Cap best run trash to reasonable bounds
+  bestRunTrash = math.max(0, math.min(100, bestRunTrash))
 
   -- Calculate delta: positive = current run ahead, negative = current run behind
-  local trashDelta = currentTrash - ghostCarTrash
+  local trashDelta = currentTrash - bestRunTrash
 
   -- PERFORMANCE OPTIMIZATION: Throttle debug messages
   local now = GetTime()
   if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
     PushMaster:DebugPrint(string.format(
-      "Ghost Car Trash: Time %.1fs | Current: %.1f%% | Ghost Car: %.1f%% | Delta: %+.1f%%",
-      elapsedTime, currentTrash, ghostCarTrash, trashDelta))
+      "Best Run Trash: Time %.1fs | Current: %.1f%% | Best Run: %.1f%% | Delta: %+.1f%%",
+      elapsedTime, currentTrash, bestRunTrash, trashDelta))
   end
 
   -- Cache the result
@@ -892,25 +896,25 @@ function Calculator:CalculateBossDelta(currentRun, bestTime, elapsedTime)
 
   local bestBossKillTimes = bestTime.bossKillTimes or {}
 
-  -- GHOST CAR LOGIC: How many bosses did the best run have killed by this exact time?
-  local ghostCarBossCount = 0
+  -- BEST RUN LOGIC: How many bosses did the best run have killed by this exact time?
+  local bestRunBossCount = 0
   for i = 1, #bestBossKillTimes do
     -- SAFETY: Check if boss kill data exists and has valid killTime
     local bossKill = bestBossKillTimes[i]
     if bossKill and bossKill.killTime and bossKill.killTime <= elapsedTime then
-      ghostCarBossCount = ghostCarBossCount + 1
+      bestRunBossCount = bestRunBossCount + 1
     end
   end
 
   -- Calculate delta: positive = current run ahead, negative = current run behind
-  local bossDelta = currentBossCount - ghostCarBossCount
+  local bossDelta = currentBossCount - bestRunBossCount
 
   -- PERFORMANCE OPTIMIZATION: Throttle debug messages
   local now = GetTime()
   if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
     PushMaster:DebugPrint(string.format(
-      "Ghost Car Boss: Time %.1fs | Current: %d bosses | Ghost Car: %d bosses | Delta: %+d",
-      elapsedTime, currentBossCount, ghostCarBossCount, bossDelta))
+      "Best Run Boss: Time %.1fs | Current: %d bosses | Best Run: %d bosses | Delta: %+d",
+      elapsedTime, currentBossCount, bestRunBossCount, bossDelta))
   end
 
   -- Cache the result
@@ -940,23 +944,23 @@ function Calculator:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
   -- Get death data from best run - we need to reconstruct this from logged deaths
   local bestDeathTimes = bestTime.deathTimes or {}
 
-  -- GHOST CAR LOGIC: How many deaths did the best run have by this exact time?
-  local ghostCarDeathCount = 0
+  -- BEST RUN LOGIC: How many deaths did the best run have by this exact time?
+  local bestRunDeathCount = 0
   for _, deathTime in ipairs(bestDeathTimes) do
     if deathTime <= elapsedTime then
-      ghostCarDeathCount = ghostCarDeathCount + 1
+      bestRunDeathCount = bestRunDeathCount + 1
     end
   end
 
   -- Calculate delta: positive = current run has more deaths, negative = current run has fewer deaths
-  local deathDelta = currentDeathCount - ghostCarDeathCount
+  local deathDelta = currentDeathCount - bestRunDeathCount
 
   -- PERFORMANCE OPTIMIZATION: Throttle debug messages
   local now = GetTime()
   if now - calculationCache.lastDebugTime > calculationCache.debugThrottle then
     PushMaster:DebugPrint(string.format(
-      "Ghost Car Deaths: Time %.1fs | Current: %d deaths | Ghost Car: %d deaths | Delta: %+d",
-      elapsedTime, currentDeathCount, ghostCarDeathCount, deathDelta))
+      "Best Run Deaths: Time %.1fs | Current: %d deaths | Best Run: %d deaths | Delta: %+d",
+      elapsedTime, currentDeathCount, bestRunDeathCount, deathDelta))
   end
 
   -- Cache the result
@@ -1446,4 +1450,57 @@ function Calculator:GetSavedVariablesStats()
   stats.averageBossKills = stats.totalEntries > 0 and (stats.totalBossKills / stats.totalEntries) or 0
 
   return stats
+end
+
+---Calculate time delta and confidence
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@param progressEfficiency number Calculated progress efficiency
+---@return number timeDelta Time difference in seconds (positive = behind, negative = ahead)
+---@return number timeConfidence Confidence percentage (0-100)
+function Calculator:CalculateTimeDelta(currentRun, bestTime, elapsedTime, progressEfficiency)
+  if not bestTime or not progressEfficiency then
+    return nil, 0 -- No data available
+  end
+
+  -- Method 1: Efficiency-based projection
+  -- If we're +15% efficient, we should finish 15% faster
+  local projectedTotalTime = bestTime.time * (1 - (progressEfficiency / 100))
+  local timeDelta = projectedTotalTime - bestTime.time
+
+  -- Calculate confidence based on run progress and data quality
+  local confidence = 0
+
+  -- Base confidence on how far into the run we are
+  local progressRatio = elapsedTime / bestTime.time
+  progressRatio = math.max(0, math.min(1, progressRatio))
+
+  -- Confidence increases as we progress through the run
+  if progressRatio < 0.1 then
+    confidence = 30 -- Very early, low confidence
+  elseif progressRatio < 0.3 then
+    confidence = 50 -- Early run, moderate confidence
+  elseif progressRatio < 0.6 then
+    confidence = 75 -- Mid run, good confidence
+  else
+    confidence = 90 -- Late run, high confidence
+  end
+
+  -- Reduce confidence if efficiency is extreme (likely inaccurate)
+  local efficiencyMagnitude = math.abs(progressEfficiency)
+  if efficiencyMagnitude > 50 then
+    confidence = confidence * 0.5 -- Very extreme efficiency, reduce confidence
+  elseif efficiencyMagnitude > 25 then
+    confidence = confidence * 0.8 -- Moderate extreme efficiency
+  end
+
+  -- Ensure confidence is within bounds
+  confidence = math.max(0, math.min(100, confidence))
+
+  PushMaster:DebugPrint(string.format(
+    "Time Delta: %.1f%% efficiency -> %+.0fs delta (%.0f%% confidence)",
+    progressEfficiency, timeDelta, confidence))
+
+  return timeDelta, confidence
 end

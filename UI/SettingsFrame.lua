@@ -20,6 +20,12 @@ local isInitialized = false
 -- UI elements storage
 local elements = {}
 
+-- Get player's class color for consistent theming
+local function getClassColor()
+  local playerClass = select(2, UnitClass("player"))
+  return RAID_CLASS_COLORS[playerClass] or { r = 1, g = 0.82, b = 0 } -- Fallback to gold if class color not found
+end
+
 -- Default settings structure
 local defaultSettings = {
   minimap = {
@@ -114,8 +120,7 @@ end
 ---Create the main settings frame
 local function createSettingsFrame()
   -- Get the player's class color
-  local playerClass = select(2, UnitClass("player"))
-  local classColor = RAID_CLASS_COLORS[playerClass] or { r = 0.6, g = 0.2, b = 1.0 }
+  local classColor = getClassColor()
 
   -- Create main frame (wider for two-column layout)
   frame = CreateFrame("Frame", "PushMasterSettingsFrame", UIParent, "BackdropTemplate")
@@ -156,7 +161,7 @@ local function createSettingsFrame()
   local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("CENTER", titleBar, "CENTER", 0, 0)
   title:SetText("PushMaster")
-  title:SetTextColor(1, 0.82, 0) -- WoW Gold
+  title:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Close button
   local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -175,7 +180,7 @@ local function createSettingsFrame()
   local infoTitle = infoArea:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   infoTitle:SetPoint("TOP", infoArea, "TOP", 0, 0)
   infoTitle:SetText("PushMaster: Real-time M+ Delta Analyzer")
-  infoTitle:SetTextColor(1, 0.82, 0) -- WoW Gold
+  infoTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Info description
   local infoDesc = infoArea:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -335,10 +340,10 @@ local function createSettingsFrame()
   footerFrame:SetSize(frame:GetWidth(), 65)
   footerFrame:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
 
-  -- Version and author info centered with gold color
+  -- Version and author info centered with class color
   local versionText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   versionText:SetPoint("CENTER", footerFrame, "CENTER", 0, 0)
-  versionText:SetTextColor(1, 0.82, 0) -- Gold color like DotMaster
+  versionText:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Store reference for dynamic updates
   elements.versionText = versionText
@@ -377,7 +382,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.3"   -- Fallback version
+    local version = "0.9.4"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -613,6 +618,9 @@ end
 
 ---Show export dialog for data export
 function SettingsFrame:ShowExportDialog()
+  -- Get the player's class color
+  local classColor = getClassColor()
+
   -- Create a simple export dialog
   local exportFrame = CreateFrame("Frame", "PushMasterExportFrame", UIParent, "BackdropTemplate")
   exportFrame:SetSize(400, 300)
@@ -638,7 +646,7 @@ function SettingsFrame:ShowExportDialog()
   local title = exportFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOP", exportFrame, "TOP", 0, -15)
   title:SetText("Export PushMaster Data")
-  title:SetTextColor(1, 0.82, 0)
+  title:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Export text area
   local scrollFrame = CreateFrame("ScrollFrame", nil, exportFrame, "UIPanelScrollFrameTemplate")
@@ -693,7 +701,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.3"   -- Fallback version
+    local version = "0.9.4"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -735,6 +743,9 @@ function SettingsFrame:ShowDataStatistics()
     return
   end
 
+  -- Get the player's class color
+  local classColor = getClassColor()
+
   -- Get statistics from Calculator
   local stats = PushMaster.Data.Calculator:GetSavedVariablesStats()
   local settings = PushMaster.Data.Calculator:GetOptimizationSettings()
@@ -758,7 +769,7 @@ function SettingsFrame:ShowDataStatistics()
   local title = statsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOP", statsFrame, "TOP", 0, -20)
   title:SetText("Saved Variables Statistics")
-  title:SetTextColor(1, 0.82, 0) -- Gold color
+  title:SetTextColor(classColor.r, classColor.g, classColor.b)
 
   -- Create scrollable content area
   local scrollFrame = CreateFrame("ScrollFrame", nil, statsFrame, "UIPanelScrollFrameTemplate")
