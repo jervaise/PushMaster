@@ -8,19 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.2] - 2025-01-05
 
 ### Fixed
-- **Dungeon Name Display**: Fixed "Dungeon 504" and similar issues by using WoW API instead of hardcoded mappings
-- **API Integration**: Replaced hardcoded DUNGEON_NAMES mapping with proper `C_ChallengeMode.GetMapUIInfo()` calls
-- **Future Compatibility**: Addon now automatically supports new dungeons without code updates
+- **Dungeon Name Display**: Fixed hardcoded dungeon names not displaying correctly, now uses WoW API to retrieve proper localized dungeon names (e.g., "Dungeon 504" now shows actual dungeon name)
 
 ### Changed
-- **Dynamic Dungeon Names**: All dungeon names now retrieved from WoW API in real-time
-- **Localization Support**: Dungeon names automatically display in player's language
-- **Code Cleanup**: Removed obsolete hardcoded dungeon name mappings
+- **Dungeon Name Retrieval**: Switched from internal hardcoded mapping to WoW API (`C_ChallengeMode.GetMapUIInfo`) for dynamic dungeon name display
 
 ### Technical Improvements
-- **Proper API Usage**: Uses Blizzard's official API for dungeon information
-- **Maintainability**: No more manual updates needed for new dungeons
-- **Consistency**: Same approach used by other major addons
+- **API Compliance**: Ensured dungeon name retrieval is fully compliant with WoW API standards
+- **Localization Support**: Addon now automatically supports all WoW client languages for dungeon names
+- **Future Proofing**: No manual updates needed for new dungeons or map IDs
 
 ## [1.2.1] - 2025-01-05
 
