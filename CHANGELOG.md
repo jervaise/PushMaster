@@ -5,6 +5,20 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-01-04
+
+### Fixed
+- **Test Mode Persistence**: Fixed test mode fake data persisting after stopping, causing incorrect calculations
+- **Timer/Efficiency Consistency**: Unified calculation system so timer and efficiency always show consistent values
+- **Early Run Calculations**: Improved accuracy of calculations in the first few minutes of runs
+- **Time Delta Magnitude**: Fixed timer showing insignificant time differences - now properly reflects the impact of efficiency percentages on total run time
+
+### Changed
+- Timer calculation now derives from efficiency calculation using the same data source
+- Test mode properly stores and restores original best time data
+- Added `/pm stoptest` command for emergency test mode cleanup
+- Improved confidence thresholds for early run calculations
+
 ## [1.0.1] - 2025-01-04
 
 ### Fixed

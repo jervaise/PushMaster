@@ -1151,66 +1151,35 @@ function Calculator:GetCurrentComparison()
   local timeConfidence = 0
 
   if bestTime then
-    -- ENHANCED: Use full adaptive algorithm with method selection
-    local selectedMethod = self:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
+    -- CRITICAL FIX: Use unified calculation approach - efficiency first, then derive timer
+    -- Calculate individual progress metrics using consistent data source
+    trashProgress = self:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
+    bossProgress = self:CalculateBossDelta(currentRun, bestTime, elapsedTime)
+    deathProgress = self:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
 
-    -- ENHANCED: Calculate using ensemble forecasting for maximum accuracy
-    local ensembleResult = self:CalculateEnsembleForecast(currentRun, bestTime, elapsedTime)
+    -- Calculate overall efficiency using the same data
+    progressEfficiency = self:CalculateOverallEfficiency(trashProgress, bossProgress, currentRun, bestTime, elapsedTime)
 
-    if ensembleResult then
-      timeDelta = ensembleResult.timeDelta
-      -- Fix: ensembleResult returns confidenceBonus, not confidence
-      -- Calculate actual confidence by using the base confidence from the best method
-      local selectedMethod = self:GetBestCalculationMethod(currentRun, bestTime, elapsedTime)
-      local _, baseConfidence = self:CalculateTimeDeltaUsingMethod(selectedMethod.name, currentRun, bestTime, elapsedTime)
-      timeConfidence = math.min(100, (baseConfidence or 50) + ensembleResult.confidenceBonus)
+    -- CRITICAL FIX: Derive timer from efficiency calculation, not separate calculation
+    -- Convert efficiency percentage to time delta using best run as baseline
+    timeDelta, timeConfidence = self:ConvertEfficiencyToTimeDelta(progressEfficiency, currentRun, bestTime, elapsedTime)
 
-      -- Calculate individual progress metrics using adaptive weights
-      local dynamicWeights = self:CalculateDynamicEfficiencyWeights(currentRun, bestTime, elapsedTime)
-      local adaptiveBossWeights = self:CalculateAdaptiveBossWeighting(bestTime, currentRun, elapsedTime)
+    -- Apply learning factor for continuous improvement
+    progressEfficiency = self:ApplyEnhancedLearningFactor(progressEfficiency, currentRun, bestTime, elapsedTime)
 
-      -- Enhanced progress calculations
-      trashProgress = self:CalculateTrashDelta(currentRun, bestTime, elapsedTime)
-      bossProgress = self:CalculateBossDelta(currentRun, bestTime, elapsedTime)
-      deathProgress = self:CalculateDeathDelta(currentRun, bestTime, elapsedTime)
+    -- Apply display smoothing to reduce flickering
+    timeDelta = self:ApplyDisplaySmoothing("timeDelta", timeDelta)
+    progressEfficiency = self:ApplyDisplaySmoothing("efficiency", progressEfficiency)
 
-      -- Calculate overall efficiency using enhanced algorithm
-      progressEfficiency = self:CalculateOverallEfficiency(trashProgress, bossProgress, currentRun, bestTime, elapsedTime)
-
-      -- Apply learning factor for continuous improvement
-      progressEfficiency = self:ApplyEnhancedLearningFactor(progressEfficiency, currentRun, bestTime, elapsedTime)
-
-      -- Apply display smoothing to reduce flickering
-      timeDelta = self:ApplyDisplaySmoothing("timeDelta", timeDelta)
-      progressEfficiency = self:ApplyDisplaySmoothing("efficiency", progressEfficiency)
-
-      -- Track method performance for learning
-      self:TrackMethodPerformance(selectedMethod.name, timeDelta, timeConfidence, currentRun, bestTime)
-
-      -- ENHANCED: Detailed debug logging for the enhanced algorithm
-      if PERFORMANCE_CONFIG.enableDebugLogging then
-        PushMaster:DebugPrint(string.format(
-          "ENHANCED ALGORITHM: Method=%s, Delta=%+.1fs, Confidence=%.0f%%, Efficiency=%.1f%%",
-          selectedMethod.name, timeDelta, timeConfidence, progressEfficiency))
-        PushMaster:DebugPrint(string.format(
-          "  Progress: Trash=%.1f%%, Boss=%d, Deaths=%+d, Weights: T=%.2f B=%.2f D=%.2f",
-          trashProgress, bossProgress, deathProgress,
-          dynamicWeights.trash or 0, dynamicWeights.boss or 0, dynamicWeights.death or 0))
-      end
-    else
-      -- Fallback to optimized calculation if ensemble fails
-      local paceData = self:CalculateIntelligentPaceOptimized(currentRun, bestTime, elapsedTime)
-
-      progressEfficiency = paceData.efficiency or 0
-      trashProgress = paceData.trashDelta or 0
-      bossProgress = paceData.bossDelta or 0
-      deathProgress = paceData.deathDelta or 0
-
-      timeDelta, timeConfidence = self:CalculateTimeDeltaOptimized(currentRun, bestTime, elapsedTime, progressEfficiency)
-
-      if PERFORMANCE_CONFIG.enableDebugLogging then
-        PushMaster:DebugPrint("Enhanced algorithm failed, using optimized fallback")
-      end
+    -- ENHANCED: Detailed debug logging for the unified algorithm
+    if PERFORMANCE_CONFIG.enableDebugLogging then
+      PushMaster:DebugPrint(string.format(
+        "UNIFIED ALGORITHM: Efficiency=%.1f%%, Delta=%+.1fs, Confidence=%.0f%%",
+        progressEfficiency, timeDelta, timeConfidence))
+      PushMaster:DebugPrint(string.format(
+        "  Progress: Trash=%+.1f%%, Boss=%+d, Deaths=%+d",
+        trashProgress, bossProgress, deathProgress))
+      PushMaster:DebugPrint("CONSISTENCY CHECK: Timer derived from efficiency - should be consistent!")
     end
   else
     -- No comparison data available yet, provide default values
@@ -2739,6 +2708,76 @@ function Calculator:ApplyEnhancedLearningFactor(baseEfficiency, currentRun, best
   return baseEfficiency + learningAdjustment
 end
 
+---CRITICAL FIX: Convert efficiency percentage to time delta using unified calculation
+---@param progressEfficiency number Overall efficiency percentage (positive = ahead, negative = behind)
+---@param currentRun table Current run data
+---@param bestTime table Best time data
+---@param elapsedTime number Current elapsed time
+---@return number timeDelta Time difference in seconds (positive = behind, negative = ahead)
+---@return number timeConfidence Confidence percentage (0-100)
+function Calculator:ConvertEfficiencyToTimeDelta(progressEfficiency, currentRun, bestTime, elapsedTime)
+  if not bestTime or not progressEfficiency then
+    return 0, 0
+  end
+
+  -- CRITICAL FIX: Use projected total run time for meaningful time delta
+  -- Efficiency percentage should be applied to the total expected run time, not just elapsed time
+
+  -- Calculate current progress to estimate where we are in the run
+  local currentProgress = math.max(currentRun.progress.trash / 100, currentRun.progress.bosses / 4)
+  currentProgress = math.max(currentProgress, 0.01) -- Minimum 1% to avoid division by zero
+  currentProgress = math.min(currentProgress, 0.95) -- Cap at 95%
+
+  -- Project total run time based on current pace
+  local projectedTotalTime = elapsedTime / currentProgress
+
+  -- Use best run time as baseline if it's reasonable, otherwise use projection
+  local baselineTime = bestTime.time
+  if projectedTotalTime > 0 and projectedTotalTime < (bestTime.time * 2) then
+    -- Use average of best time and projected time for more stable calculation
+    baselineTime = (bestTime.time + projectedTotalTime) / 2
+  end
+
+  -- Convert efficiency percentage to time delta using the baseline total time
+  -- Positive efficiency = ahead = negative time delta
+  -- Negative efficiency = behind = positive time delta
+  local timeDelta = -(progressEfficiency / 100) * baselineTime
+
+  -- Calculate confidence based on run progress and data quality
+  local progressRatio = elapsedTime / bestTime.time
+  progressRatio = math.max(0, math.min(1, progressRatio))
+
+  local confidence = 50 -- Base confidence
+
+  -- Confidence increases as we progress through the run
+  if progressRatio < 0.1 then
+    confidence = 25 -- Very early, low confidence
+  elseif progressRatio < 0.3 then
+    confidence = 50 -- Early run, moderate confidence
+  elseif progressRatio < 0.6 then
+    confidence = 75 -- Mid run, good confidence
+  else
+    confidence = 90 -- Late run, high confidence
+  end
+
+  -- Reduce confidence for extreme efficiency values (likely calculation errors)
+  local absEfficiency = math.abs(progressEfficiency)
+  if absEfficiency > 50 then
+    confidence = confidence * 0.5 -- Very extreme efficiency, reduce confidence
+  elseif absEfficiency > 25 then
+    confidence = confidence * 0.8 -- Large efficiency, reduce confidence
+  end
+
+  -- Ensure confidence is within bounds
+  confidence = math.max(0, math.min(100, confidence))
+
+  PushMaster:DebugPrint(string.format(
+    "Efficiency->Time: %.1f%% efficiency -> %+.0fs delta (%.0f%% confidence) [Baseline: %.0fs, Progress: %.1f%%]",
+    progressEfficiency, timeDelta, confidence, baselineTime, currentProgress * 100))
+
+  return timeDelta, confidence
+end
+
 ---Calculate time delta and confidence
 ---@param currentRun table Current run data
 ---@param bestTime table Best time data
@@ -2805,9 +2844,21 @@ function Calculator:CalculateTimeDelta_Legacy(currentRun, bestTime, elapsedTime,
     -- Estimate based on overall completion percentage
     local estimatedProgress = math.max(currentTrash / 100, currentBosses / 4) -- Assume 4 bosses max
     estimatedProgress = math.min(estimatedProgress, 0.95)                     -- Cap at 95% to avoid division issues
-    bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
-    calculationMethod = "proportional"
-    methodDetails = string.format("%.1f%% estimated progress", estimatedProgress * 100)
+
+    -- CRITICAL FIX: Prevent unrealistic early-run calculations
+    -- In the first few minutes, proportional estimates are highly inaccurate
+    local progressRatio = elapsedTime / bestTime.time
+    if progressRatio < 0.15 and estimatedProgress < 0.1 then
+      -- Very early in run with very low progress - use time-based estimate instead
+      bestRunTimeAtSimilarProgress = elapsedTime -- Assume we're on pace for now
+      calculationMethod = "early_run_fallback"
+      methodDetails = string.format("Early run (%.1f%% progress, %.1f%% time)", estimatedProgress * 100,
+        progressRatio * 100)
+    else
+      bestRunTimeAtSimilarProgress = bestTime.time * estimatedProgress
+      calculationMethod = "proportional"
+      methodDetails = string.format("%.1f%% estimated progress", estimatedProgress * 100)
+    end
   end
 
   -- Calculate direct time difference at this progress point
@@ -2820,9 +2871,11 @@ function Calculator:CalculateTimeDelta_Legacy(currentRun, bestTime, elapsedTime,
   local progressRatio = elapsedTime / bestTime.time
   progressRatio = math.max(0, math.min(1, progressRatio))
 
-  -- Confidence increases as we progress through the run
+  -- CRITICAL FIX: Much lower confidence for very early run calculations
   if progressRatio < 0.1 then
-    confidence = 30 -- Very early, low confidence
+    confidence = 15 -- Very early, very low confidence (reduced from 30)
+  elseif progressRatio < 0.15 then
+    confidence = 25 -- Still very early, low confidence
   elseif progressRatio < 0.3 then
     confidence = 50 -- Early run, moderate confidence
   elseif progressRatio < 0.6 then
@@ -2838,6 +2891,8 @@ function Calculator:CalculateTimeDelta_Legacy(currentRun, bestTime, elapsedTime,
     confidence = math.min(100, confidence + 10) -- High confidence
   elseif calculationMethod == "boss_count" then
     confidence = math.max(20, confidence - 10)  -- Lower confidence
+  elseif calculationMethod == "early_run_fallback" then
+    confidence = math.max(5, confidence - 10)   -- Very low confidence for early run fallback
   else                                          -- proportional
     confidence = math.max(10, confidence - 20)  -- Lowest confidence
   end

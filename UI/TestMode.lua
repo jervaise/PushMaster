@@ -23,6 +23,7 @@ local lastMessage = ""
 local testLoopTimer = nil
 local lastUpdateTime = nil
 local originalDebugMode = false -- Store original debug mode state
+local originalBestTimes = nil   -- Store original best times before test mode
 
 -- Sample run data for testing with realistic pace variations
 local SAMPLE_RUN_DATA = {
@@ -218,6 +219,10 @@ function TestMode:setupFakeBestTime()
     return
   end
 
+  -- CRITICAL FIX: Store original best times before overwriting with fake data
+  originalBestTimes = Calculator:ExportBestTimes()
+  PushMaster:DebugPrint("Stored original best times for restoration after test mode")
+
   -- Access the bestTimes storage directly (we need to inject fake data)
   -- Since bestTimes is local in Calculator, we'll use the import function
   local fakeBestTimes = {}
@@ -404,6 +409,22 @@ function TestMode:testLoop()
               comparison.trashProgress,
               comparison.bossProgress,
               comparison.deathProgress or 0))
+
+            -- CONSISTENCY CHECK: Show timer vs efficiency consistency
+            local timerText = "N/A"
+            if comparison.timeDelta then
+              local absTime = math.abs(comparison.timeDelta)
+              local sign = comparison.timeDelta >= 0 and "+" or "-"
+              if absTime >= 60 then
+                local minutes = math.floor(absTime / 60)
+                local seconds = math.floor(absTime % 60)
+                timerText = string.format("%s%dm%02ds", sign, minutes, seconds)
+              else
+                timerText = string.format("%s%ds", sign, math.floor(absTime))
+              end
+            end
+            PushMaster:Print(string.format("  * UNIFIED: Timer=%s | Efficiency=%+d%% (should be consistent!)",
+              timerText, comparison.progressEfficiency or 0))
           end
         end
 
@@ -522,6 +543,24 @@ function TestMode:StopTest()
   -- Reset Calculator state
   self:ResetCalculator()
 
+  -- CRITICAL FIX: Restore original best times to prevent test data from persisting
+  local Calculator = PushMaster.Data.Calculator
+  if Calculator and originalBestTimes then
+    Calculator:ImportBestTimes(originalBestTimes)
+    PushMaster:DebugPrint("Restored original best times after test mode")
+    originalBestTimes = nil
+  elseif Calculator then
+    -- If no original data was stored, clear all best times to prevent fake data persistence
+    Calculator:ClearBestTimes()
+    PushMaster:DebugPrint("Cleared all best times after test mode (no original data to restore)")
+  end
+
+  -- Clear MainFrame display to remove any test mode data
+  if PushMaster.UI.MainFrame then
+    PushMaster.UI.MainFrame:ResetDisplayCache()
+    PushMaster.UI.MainFrame:ClearCache()
+  end
+
   -- Restore original debug mode
   if originalDebugMode then
     PushMaster:SetDebugMode(true)
@@ -577,6 +616,12 @@ end
 
 ---Initialize the TestMode module
 function TestMode:Initialize()
+  -- SAFETY: Ensure test mode is stopped if addon is reloaded while test was running
+  if isTestActive then
+    PushMaster:DebugPrint("Detected test mode was active during addon reload - cleaning up")
+    self:StopTest()
+  end
+
   PushMaster:DebugPrint("TestMode module initialized with real Calculator integration")
 end
 

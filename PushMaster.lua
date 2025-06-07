@@ -10,7 +10,7 @@ PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "A
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "1.0.0"
+PushMaster.version = "1.0.2"
 PushMaster.author = "Jervaise"
 
 -- Debug mode flag
@@ -85,7 +85,7 @@ local function onAddonLoaded(loadedAddonName)
         lock = false
       },
       -- Metadata for debugging and support
-      version = "1.0.0", -- Use hardcoded version for initial setup
+      version = "1.0.2", -- Use hardcoded version for initial setup
       author = "Jervaise",
       lastLogin = nil,
       installDate = nil
@@ -152,12 +152,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "1.0.0"
+      PushMaster.version = "1.0.2"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "1.0.0"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "1.0.2"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC
@@ -366,6 +366,17 @@ SlashCmdList["PUSHMASTER"] = function(msg)
     else
       PushMaster:Print("Test mode not available")
     end
+  elseif command == "stoptest" then
+    -- Stop test mode
+    if PushMaster.UI and PushMaster.UI.TestMode then
+      if PushMaster.UI.TestMode:IsActive() then
+        PushMaster.UI.TestMode:StopTest()
+      else
+        PushMaster:Print("Test mode is not currently active")
+      end
+    else
+      PushMaster:Print("Test mode not available")
+    end
   elseif command == "reset" then
     -- Reset current run
     if PushMaster.Data and PushMaster.Data.Calculator then
@@ -380,6 +391,7 @@ SlashCmdList["PUSHMASTER"] = function(msg)
     PushMaster:Print("  /pm - Toggle settings frame")
     PushMaster:Print("  /pm debug - Toggle debug mode")
     PushMaster:Print("  /pm test - Start test mode")
+    PushMaster:Print("  /pm stoptest - Stop test mode")
     PushMaster:Print("  /pm reset - Reset current run")
     PushMaster:Print("  /pm help - Show this help")
   else

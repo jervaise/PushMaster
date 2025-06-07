@@ -392,8 +392,8 @@ local function formatTimeDelta(timeDelta, confidence)
     return "" -- Don't show if no data
   end
 
-  if confidence < 30 then
-    return "" -- Don't show if low confidence
+  if confidence < 40 then
+    return "" -- Don't show if low confidence (increased threshold to prevent early-run calculation errors)
   end
 
   -- STABILITY: Apply smoothing to prevent rapid fluctuations
