@@ -1,7 +1,7 @@
 ## Interface: 110105
 ## Title: PushMaster
 ## Notes: Real-time Mythic+ pace comparison against your best runs
-## Version: 1.2.1
+## Version: 1.2.2
 ## Author: Jervaise
 ## IconTexture: Interface\AddOns\PushMaster\Media\flash
 ## SavedVariables: PushMasterDB
