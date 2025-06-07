@@ -5,6 +5,24 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-01-05
+
+### Fixed
+- **Timer Calculation Accuracy**: Fixed major calculation errors that were showing incorrect timer values (e.g., -15m55s instead of reasonable times)
+- **Boss Weighting Logic**: Implemented proper boss weighting system as specified in logic documentation
+- **Death Penalty Integration**: Corrected death penalty calculation to properly add 15 seconds per death to effective time
+- **Efficiency Calculation**: Simplified and fixed efficiency calculation to match logic documentation exactly
+
+### Changed
+- **Timer Algorithm**: Completely rewrote timer calculation logic for accuracy and simplicity
+- **Progress Comparison**: Improved trash and boss progress comparison using proper time interpolation
+- **Calculation Confidence**: Enhanced confidence scoring based on run progress and data availability
+
+### Technical Improvements
+- **Code Simplification**: Removed overly complex progress interpolation in favor of direct comparison
+- **Logic Compliance**: Ensured all calculations match the documented logic specifications
+- **Performance**: Simplified calculations reduce computational overhead
+
 ## [1.2.0] - 2025-01-05
 
 ### Fixed

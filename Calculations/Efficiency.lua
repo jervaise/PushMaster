@@ -14,12 +14,20 @@ PushMaster.Calculations.Efficiency = Efficiency
 -- Death penalty constant (15 seconds per death)
 local DEATH_PENALTY_SECONDS = 15
 
+-- Default boss weights (can be overridden per dungeon)
+local DEFAULT_BOSS_WEIGHTS = {
+  [1] = 1.0, -- First boss: 60s fight = weight 1.0
+  [2] = 2.0, -- Second boss: 120s fight = weight 2.0
+  [3] = 3.0, -- Third boss: 180s fight = weight 3.0
+  [4] = 4.0  -- Fourth boss: 240s fight = weight 4.0
+}
+
 ---Calculate overall efficiency percentage
 ---@param current table Current run state {elapsedTime, trash, bosses, deaths}
----@param best table Best run data at same time point {trash, bosses, deaths}
+---@param best table Best run data with timeline
 ---@param bossWeights table|nil Boss weights for the dungeon
 ---@return number efficiency Efficiency percentage (0 = on pace, >0 = ahead, <0 = behind)
-function Efficiency:Calculate(current, best)
+function Efficiency:Calculate(current, best, bossWeights)
   if not current or not best then
     return 0
   end
@@ -33,13 +41,14 @@ function Efficiency:Calculate(current, best)
     return 0
   end
 
-  -- Calculate component differences
+  -- Calculate flat differences
   local trashDiff = current.trash - bestAtTime.trash
   local bossDiff = current.bosses - bestAtTime.bosses
 
-  -- Simple efficiency calculation: average of trash and boss progress
-  -- Positive = ahead, negative = behind
-  local efficiency = (trashDiff + (bossDiff * 20)) / 2 -- Boss worth ~20% trash
+  -- Simple efficiency calculation as per logic doc
+  -- Trash has base weight 1.0, bosses have higher weight based on duration
+  -- For now, use simple 3x multiplier for bosses (average boss weight)
+  local efficiency = (trashDiff + (bossDiff * 3)) / 2
 
   return efficiency
 end
@@ -71,23 +80,18 @@ function Efficiency:GetBestRunAtTime(bestRun, targetTime)
 
   -- Edge cases
   if not before then
-    -- Before first sample - interpolate from zero
-    local firstSample = timeline[1]
-    if firstSample.time > 0 then
-      local ratio = targetTime / firstSample.time
-      return {
-        trash = firstSample.trash * ratio,
-        bosses = 0, -- No bosses killed yet at very early times
-        deaths = 0  -- Assume no deaths at start
-      }
-    else
-      return { trash = 0, bosses = 0, deaths = 0 }
-    end
+    -- Before first sample - start from zero
+    return { trash = 0, bosses = 0, deaths = 0 }
   elseif not after then
-    return timeline[#timeline] -- After last sample
+    -- After last sample - use last values
+    return {
+      trash = timeline[#timeline].trash,
+      bosses = timeline[#timeline].bosses,
+      deaths = timeline[#timeline].deaths
+    }
   end
 
-  -- Linear interpolation
+  -- Linear interpolation between samples
   local timeDiff = after.time - before.time
   if timeDiff == 0 then
     return before
@@ -98,13 +102,13 @@ function Efficiency:GetBestRunAtTime(bestRun, targetTime)
   return {
     trash = before.trash + (after.trash - before.trash) * ratio,
     bosses = before.bosses + (after.bosses - before.bosses) * ratio,
-    deaths = before.deaths -- Deaths don't interpolate
+    deaths = before.deaths -- Deaths don't interpolate linearly
   }
 end
 
----Calculate individual component differences
+---Calculate individual component differences (flat differences as per logic doc)
 ---@param current table Current run state
----@param best table Best run data at same time
+---@param best table Best run data
 ---@return number, number, number trashDiff, bossDiff, deathDiff
 function Efficiency:GetComponentDifferences(current, best)
   if not current or not best then
@@ -120,6 +124,7 @@ function Efficiency:GetComponentDifferences(current, best)
     return 0, 0, 0
   end
 
+  -- Return flat differences as specified in logic doc
   local trashDiff = current.trash - bestAtTime.trash
   local bossDiff = current.bosses - bestAtTime.bosses
   local deathDiff = current.deaths - bestAtTime.deaths
@@ -127,7 +132,7 @@ function Efficiency:GetComponentDifferences(current, best)
   return trashDiff, bossDiff, deathDiff
 end
 
----Calculate time delta (ahead/behind in seconds)
+---Calculate time delta (ahead/behind in seconds) - SIMPLIFIED VERSION
 ---@param current table Current run state
 ---@param best table Best run timeline
 ---@return number|nil timeDelta Seconds ahead (negative) or behind (positive)
@@ -138,86 +143,41 @@ function Efficiency:CalculateTimeDelta(current, best)
   end
 
   local timeline = best.timeline
-  if #timeline < 2 then
+  if #timeline == 0 then
     return nil, 0
   end
 
-  -- Account for death penalty in current effective time
+  -- Calculate effective time (current time + death penalty)
   local currentEffectiveTime = current.elapsedTime + (current.deaths * DEATH_PENALTY_SECONDS)
 
-  -- Find where in best run timeline we would be with current progress
-  local currentProgress = current.trash + (current.bosses * 20) -- Rough combined progress
-  local targetTime = nil
-  local confidence = 0
-
-  -- Handle early game edge case
-  if currentProgress == 0 and current.elapsedTime < 30 then
-    -- Very early in the run, use simple time comparison
-    local firstSample = timeline[1]
-    if firstSample.time > 0 then
-      local bestProgressAtTime = (firstSample.trash + firstSample.bosses * 20) * (current.elapsedTime / firstSample.time)
-      local progressDiff = bestProgressAtTime - currentProgress
-      -- Rough estimate: 1% progress = ~18 seconds in a 30-minute dungeon
-      targetTime = current.elapsedTime - (progressDiff * 18)
-      confidence = 30 -- Low confidence for early estimates
-    else
-      return 0, 10
-    end
-  else
-    -- Search timeline for matching progress
-    for i = 2, #timeline do
-      local prev = timeline[i - 1]
-      local curr = timeline[i]
-
-      local prevProgress = prev.trash + (prev.bosses * 20)
-      local currProgress = curr.trash + (curr.bosses * 20)
-
-      if currentProgress >= prevProgress and currentProgress <= currProgress then
-        -- Interpolate time
-        local progressDiff = currProgress - prevProgress
-        if progressDiff > 0 then
-          local ratio = (currentProgress - prevProgress) / progressDiff
-          targetTime = prev.time + (curr.time - prev.time) * ratio
-
-          -- Higher confidence with more progress and smaller interpolation gaps
-          local timeDiff = curr.time - prev.time
-          confidence = math.max(50, math.min(90, 70 - (timeDiff / 30)))
-          break
-        end
-      end
-    end
+  -- Get what the best run had at our current effective time
+  local bestAtEffectiveTime = self:GetBestRunAtTime(best, currentEffectiveTime)
+  if not bestAtEffectiveTime then
+    return nil, 0
   end
 
-  if not targetTime then
-    -- Edge cases
-    local firstProgress = timeline[1].trash + timeline[1].bosses * 20
-    local lastProgress = timeline[#timeline].trash + timeline[#timeline].bosses * 20
+  -- Simple comparison: just look at trash progress difference
+  -- Each 1% trash difference ≈ 18 seconds in a 30-minute dungeon
+  local trashDiff = current.trash - bestAtEffectiveTime.trash
+  local bossDiff = current.bosses - bestAtEffectiveTime.bosses
 
-    if currentProgress < firstProgress then
-      -- We're behind the first timeline point
-      if firstProgress > 0 then
-        targetTime = timeline[1].time * (currentProgress / firstProgress)
-      else
-        targetTime = 0
-      end
-      confidence = 40
-    else
-      -- We're ahead of the last timeline point (exceptional pace)
-      if best.totalTime and lastProgress > 0 then
-        -- Extrapolate based on final pace
-        targetTime = best.totalTime * (currentProgress / lastProgress)
-      else
-        targetTime = timeline[#timeline].time
-      end
-      confidence = 60
-    end
+  -- Convert to time: trash is 1% = 18s, each boss ≈ 5 minutes = 300s
+  local trashTimeDelta = -(trashDiff * 18) -- Negative = ahead
+  local bossTimeDelta = -(bossDiff * 300)  -- Negative = ahead
+
+  -- Combine with simple average
+  local estimatedTimeDelta = (trashTimeDelta + bossTimeDelta) / 2
+
+  -- Confidence based on how much data we have
+  local confidence = 50
+  if current.elapsedTime > 300 then -- After 5 minutes
+    confidence = 70
+  end
+  if current.elapsedTime > 600 then -- After 10 minutes
+    confidence = 85
   end
 
-  -- Calculate delta (positive = behind, negative = ahead)
-  -- Use effective time (including death penalty) vs target time
-  local timeDelta = currentEffectiveTime - targetTime
-
-  return timeDelta, confidence
+  return estimatedTimeDelta, confidence
 end
 
 return Efficiency
