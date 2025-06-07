@@ -25,6 +25,18 @@ local lastUpdateTime = nil
 local originalDebugMode = false -- Store original debug mode state
 local originalBestTimes = nil   -- Store original best times before test mode
 
+-- Dungeon ID to name mapping (TWW Season 2) - needed for default state display
+local DUNGEON_NAMES = {
+  [2649] = "Priory of the Sacred Flame",
+  [2293] = "Theater of Pain",
+  [2097] = "Operation Mechagon: Workshop",
+  [2662] = "The Stonevault",
+  [2669] = "The Rookery",
+  [2651] = "City of Threads",
+  [2660] = "Ara-Kara, City of Echoes",
+  [1822] = "Siege of Boralus",
+}
+
 -- Sample run data for testing with realistic pace variations
 local SAMPLE_RUN_DATA = {
   {
@@ -632,10 +644,42 @@ function TestMode:StopTest()
     PushMaster:DebugPrint("Warning: Test data may persist in database")
   end
 
-  -- Clear MainFrame display to remove any test mode data
+  -- Reset MainFrame to default state (showing keystone info with default values)
   if PushMaster.UI.MainFrame then
+    -- CRITICAL: Stop the update timer to prevent any further automatic updates
+    if PushMaster.UI.MainFrame.StopUpdateTimer then
+      PushMaster.UI.MainFrame:StopUpdateTimer()
+    end
+
     PushMaster.UI.MainFrame:ResetDisplayCache()
     PushMaster.UI.MainFrame:ClearCache()
+
+    -- Use a small delay to ensure this happens after all API updates
+    C_Timer.After(0.1, function()
+      -- Create default display data to show the frame in its initial state
+      local defaultData = {
+        progressEfficiency = nil, -- nil values will show as "?%" or "?"
+        trashProgress = nil,
+        bossProgress = nil,
+        deathProgress = nil,
+        progress = { deaths = 0 },
+        deathTimePenalty = 0,
+        dungeon = mapID and DUNGEON_NAMES[mapID] or "Unknown Dungeon",
+        level = keyLevel or 0,
+        dungeonID = mapID or 0,
+        timeDelta = nil,
+        timeConfidence = nil,
+        isRecording = false -- Important: explicitly set to false to show normal display
+      }
+
+      -- Update the display to show default state
+      PushMaster.UI.MainFrame:UpdateDisplay(defaultData)
+
+      -- Restart the update timer after setting default state
+      if PushMaster.UI.MainFrame.StartUpdateTimer then
+        PushMaster.UI.MainFrame:StartUpdateTimer()
+      end
+    end)
   end
 
   -- Restore original debug mode

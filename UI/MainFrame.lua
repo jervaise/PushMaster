@@ -323,8 +323,8 @@ end
 ---@param isEfficiency boolean Whether this is progress efficiency (vs simple percentage)
 ---@return string formattedText Colored and formatted percentage
 local function formatPercentage(value, isEfficiency)
-  if value == nil then                          -- Explicitly check for nil, as 0 is a valid value
-    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- Changed from ? to N/A for clarity
+  if value == nil then                         -- Explicitly check for nil, as 0 is a valid value
+    return COLORS.GRAY .. "?%" .. COLORS.RESET -- Show ?% for default state
   end
 
   local color
@@ -353,8 +353,8 @@ end
 ---@param value number The boss count difference
 ---@return string formattedText Colored and formatted boss count
 local function formatBossCount(value)
-  if value == nil then                          -- Explicitly check for nil
-    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- Changed from ? to N/A for clarity
+  if value == nil then                        -- Explicitly check for nil
+    return COLORS.GRAY .. "?" .. COLORS.RESET -- Show ? for default state
   end
 
   local color
@@ -381,8 +381,8 @@ end
 ---@param timePenalty number Time penalty in seconds (unused now)
 ---@return string formattedText Colored and formatted death delta
 local function formatDeaths(deathDelta, timePenalty)
-  if deathDelta == nil then                     -- Explicitly check for nil
-    return COLORS.GRAY .. "N/A" .. COLORS.RESET -- No comparison data available
+  if deathDelta == nil then                   -- Explicitly check for nil
+    return COLORS.GRAY .. "0" .. COLORS.RESET -- Show 0 for default state
   end
 
   local color
@@ -478,10 +478,17 @@ function MainFrame:UpdateDisplay(comparisonData)
   end
 
   -- Check if we're in recording mode (no best run data)
-  local isRecording = comparisonData.isRecording or
-      (comparisonData.progressEfficiency == nil and
-        comparisonData.trashProgress == nil and
-        comparisonData.bossProgress == nil)
+  -- CRITICAL: Respect explicit isRecording = false to show default state
+  local isRecording = false
+  if comparisonData.isRecording == nil then
+    -- Only auto-detect recording mode if isRecording is not explicitly set
+    isRecording = (comparisonData.progressEfficiency == nil and
+      comparisonData.trashProgress == nil and
+      comparisonData.bossProgress == nil)
+  else
+    -- Use explicit value if provided
+    isRecording = comparisonData.isRecording
+  end
 
   -- Handle recording mode
   if isRecording then
@@ -677,6 +684,16 @@ function MainFrame:Hide()
   end
 
   -- Time delta frame automatically hides with parent frame
+end
+
+---Stop the update timer (exposed for test mode)
+function MainFrame:StopUpdateTimer()
+  stopUpdateTimer()
+end
+
+---Start the update timer (exposed for test mode)
+function MainFrame:StartUpdateTimer()
+  startUpdateTimer()
 end
 
 ---Check if the main frame is shown

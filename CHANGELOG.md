@@ -5,6 +5,27 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-01-05
+
+### Fixed
+- **Test Mode Reset**: Fixed issue where stopping test mode would show "Recording" instead of default state
+- **Recording Mode Detection**: Fixed UpdateDisplay logic to properly respect explicit isRecording flag
+- **Settings GUI Spacing**: Increased height of settings frame and content boxes for better slider visibility
+
+### Changed
+- **GUI Layout**: Increased settings frame height from 450px to 520px
+- **Content Boxes**: Increased left and right box heights from 270px to 340px
+- **Slider Spacing**: Improved vertical spacing between UI elements
+
+### Added
+- **Timer Control Methods**: Exposed MainFrame:StopUpdateTimer() and StartUpdateTimer() for better control
+- **Update Compatibility**: Confirmed compatibility with WoW 11.1.5
+
+### Technical Improvements
+- **Display State Management**: Improved default state handling when test mode stops
+- **Border Handling**: Fixed proper resetting of frame borders to neutral state
+- **Cache Management**: Enhanced cache clearing sequence during test mode cleanup
+
 ## [1.1.0] - 2025-01-04
 
 ### Fixed

@@ -1,0 +1,38 @@
+# PushMaster v1.2.0 Release Commands
+# Compatible with WoW 11.1.5
+# Date: 2025-01-05
+
+# 1. Stage all changes
+git add .
+
+# 2. Commit with release message
+git commit -m "Release v1.2.0 - WoW 11.1.5 compatibility and fixes
+
+- Fixed test mode reset issue (no longer shows Recording)
+- Fixed recording mode detection logic
+- Increased settings GUI height for better slider spacing
+- Updated all version references to 1.2.0
+- Confirmed compatibility with WoW 11.1.5"
+
+# 3. Create version tag
+git tag -a v1.2.0 -m "Version 1.2.0 - WoW 11.1.5 compatibility"
+
+# 4. Push current branch with changes
+git push origin HEAD
+
+# 5. Push the new tag
+git push origin v1.2.0
+
+# 6. If you want to merge to main branch
+git checkout main
+git merge <current-branch-name>  # Replace with your actual branch name
+git push origin main
+
+# 7. Optional: Create GitHub release
+# Go to https://github.com/jervaise/PushMaster/releases/new
+# Select tag: v1.2.0
+# Release title: PushMaster v1.2.0 - WoW 11.1.5 Compatibility
+# Describe the changes from CHANGELOG.md
+
+# 8. Optional: Update CurseForge/WoWInterface
+# Upload the new version with changelog 

@@ -130,7 +130,7 @@ local function createSettingsFrame()
 
   -- Create main frame (wider for two-column layout)
   frame = CreateFrame("Frame", "PushMasterSettingsFrame", UIParent, "BackdropTemplate")
-  frame:SetSize(600, 450) -- Increased width for two-column layout
+  frame:SetSize(600, 520) -- Increased height for more slider space
   frame:SetPoint("CENTER")
   frame:SetFrameStrata("HIGH")
   frame:SetMovable(true)
@@ -201,12 +201,12 @@ local function createSettingsFrame()
 
   -- Main content area (container for two boxes)
   local contentArea = CreateFrame("Frame", nil, frame)
-  contentArea:SetSize(550, 270)
+  contentArea:SetSize(550, 340)
   contentArea:SetPoint("TOP", infoArea, "BOTTOM", 0, -5)
 
   -- === LEFT BOX - CONFIGURATION ===
   local leftBox = CreateFrame("Frame", nil, contentArea, "BackdropTemplate")
-  leftBox:SetSize(265, 270)
+  leftBox:SetSize(265, 340)
   leftBox:SetPoint("TOPLEFT", contentArea, "TOPLEFT", 0, 0)
 
   -- Left box backdrop
@@ -242,7 +242,7 @@ local function createSettingsFrame()
     "Show Minimap Icon",
     "Show or hide the minimap button"
   )
-  elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -5)
+  elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -10)
 
   -- Key Level Extrapolation checkbox
   elements.extrapolationCheckbox = createCheckbox(
@@ -251,12 +251,12 @@ local function createSettingsFrame()
     "Key Level Extrapolation",
     "Compare against lower key levels when no data exists for current level.\nUses mythic+ scaling to estimate performance at higher keys."
   )
-  elements.extrapolationCheckbox:SetPoint("TOPLEFT", elements.minimapCheckbox, "BOTTOMLEFT", 0, -5)
+  elements.extrapolationCheckbox:SetPoint("TOPLEFT", elements.minimapCheckbox, "BOTTOMLEFT", 0, -10)
 
   -- Frame Scale section
   local scaleLabel = leftBox:CreateFontString(nil, "OVERLAY")
   scaleLabel:SetFont(ADDON_FONT, 10)
-  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -125)
+  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -140)
   scaleLabel:SetText("Frame Scale:")
   scaleLabel:SetTextColor(1, 1, 1)
 
@@ -284,7 +284,7 @@ local function createSettingsFrame()
   -- Performance/Accuracy slider
   local accuracyLabel = leftBox:CreateFontString(nil, "OVERLAY")
   accuracyLabel:SetFont(ADDON_FONT, 10)
-  accuracyLabel:SetPoint("TOP", elements.scaleSlider, "BOTTOM", 0, -20)
+  accuracyLabel:SetPoint("TOP", elements.scaleSlider, "BOTTOM", 0, -35)
   accuracyLabel:SetText("Accuracy:")
   accuracyLabel:SetTextColor(1, 1, 1)
 
@@ -324,7 +324,7 @@ local function createSettingsFrame()
 
   -- === RIGHT BOX - TEST MODE ===
   local rightBox = CreateFrame("Frame", nil, contentArea, "BackdropTemplate")
-  rightBox:SetSize(265, 270)
+  rightBox:SetSize(265, 340)
   rightBox:SetPoint("TOPRIGHT", contentArea, "TOPRIGHT", 0, 0)
 
   -- Right box backdrop
@@ -462,7 +462,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "1.1.0"   -- Fallback version
+    local version = "1.2.0"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -574,17 +574,7 @@ local function setupEventHandlers()
         PushMaster.UI.TestMode:StopTest()
         elements.testButton:SetText("Start Test Mode")
 
-        -- Reset main frame to default state (clear display)
-        if PushMaster.UI.MainFrame and PushMaster.UI.MainFrame.UpdateDisplay then
-          local defaultData = {
-            overallSpeed = nil,
-            trashProgress = nil,
-            bossProgress = nil,
-            progress = { deaths = 0 },
-            deathTimePenalty = 0
-          }
-          PushMaster.UI.MainFrame:UpdateDisplay(defaultData)
-        end
+        -- Don't update MainFrame here - let TestMode:StopTest() handle it properly
       else
         -- Start test mode
         PushMaster.UI.TestMode:StartTest()
@@ -679,6 +669,9 @@ function SettingsFrame:Hide()
       if elements.testButton then
         elements.testButton:SetText("Start Test Mode")
       end
+
+      -- Don't hide MainFrame immediately - let test mode reset it first
+      return
     end
 
     -- Hide main frame when settings panel closes (unless in a mythic+ dungeon)
@@ -799,7 +792,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "1.1.0"   -- Fallback version
+    local version = "1.2.0"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
