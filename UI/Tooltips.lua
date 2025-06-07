@@ -1,1 +1,0 @@
--- Tooltip generation and display system

@@ -5,6 +5,25 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-01-04
+
+### Fixed
+- **Stop Test Button Error**: Fixed nil reference error when clicking stop test button multiple times
+- **Early Game Calculations**: Fixed "-9% trash" display issue at run start by adding proper timeline initialization
+- **Timeline Interpolation**: Improved early game interpolation by adding initial timeline entry at time 0
+- **Death Penalty Implementation**: Confirmed 15-second flat penalty per death is working correctly in all calculations
+
+### Technical Improvements
+- **Error Handling**: Enhanced StopTest function to save critical data before clearing testRunData
+- **Timeline Sorting**: Added chronological sorting to ensure proper timeline order after updates
+- **Interpolation Logic**: Fixed GetBestRunAtTime function for times before first sample
+- **Code Stability**: Improved test mode cleanup and data restoration
+
+### Confirmed Working
+- Death penalty system correctly applies 15 seconds per death to effective time calculations
+- All efficiency, time delta, and component difference calculations properly include death penalties
+- Boss weighting remains at original value (20) as per design specifications
+
 ## [1.0.2] - 2025-01-04
 
 ### Fixed

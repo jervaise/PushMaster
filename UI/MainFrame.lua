@@ -76,10 +76,30 @@ local COLORS = {
 
 -- Border colors for frame backdrop
 local BORDER_COLORS = {
-  GREEN = { 0.2, 0.8, 0.2, 1 },  -- Green tint for on par or better
-  RED = { 0.8, 0.2, 0.2, 1 },    -- Red tint for behind
-  NEUTRAL = { 0.3, 0.3, 0.3, 1 } -- Default gray
+  GREEN = { 0.2, 0.8, 0.2, 1 },   -- Green tint for on par or better
+  RED = { 0.8, 0.2, 0.2, 1 },     -- Red tint for behind
+  NEUTRAL = { 0.3, 0.3, 0.3, 1 }, -- Default gray
+  BLUE = { 0.2, 0.5, 1.0, 1 }     -- Blue tint for recording
 }
+
+-- Dungeon ID to name mapping (TWW Season 2)
+local DUNGEON_NAMES = {
+  [2649] = "Priory of the Sacred Flame",
+  [2293] = "Theater of Pain",
+  [2097] = "Operation Mechagon: Workshop",
+  [2662] = "The Stonevault",
+  [2669] = "The Rookery",
+  [2651] = "City of Threads",
+  [2660] = "Ara-Kara, City of Echoes",
+  [1822] = "Siege of Boralus",
+}
+
+---Get dungeon name from ID
+---@param dungeonID number The dungeon map ID
+---@return string name The dungeon name or "Unknown Dungeon"
+local function getDungeonName(dungeonID)
+  return DUNGEON_NAMES[dungeonID] or ("Dungeon " .. tostring(dungeonID or "?"))
+end
 
 -- Timer for regular UI updates
 local updateTimer = nil
@@ -95,8 +115,9 @@ startUpdateTimer = function()
   end
 
   updateTimer = C_Timer.NewTicker(UPDATE_INTERVAL, function()
-    -- Only update if we have an active Calculator and are tracking a run
-    if PushMaster.Data and PushMaster.Data.Calculator and PushMaster.Data.Calculator:IsTrackingRun() then
+    -- Only update if we have an active API and are tracking a run
+    local API = PushMaster.Core and PushMaster.Core.API
+    if API and API:IsTrackingRun() then
       -- PERFORMANCE OPTIMIZATION: Check cache first
       local now = GetTime()
       local comparison = nil
@@ -106,7 +127,7 @@ startUpdateTimer = function()
         comparison = lastComparisonCache.data
       else
         -- Get fresh data and cache it
-        comparison = PushMaster.Data.Calculator:GetCurrentComparison()
+        comparison = API:GetCurrentComparison()
         if comparison then
           lastComparisonCache.data = comparison
           lastComparisonCache.timestamp = now
@@ -178,7 +199,6 @@ local function createTimeDeltaFrame()
   -- Initially hide the frame
   timeDeltaFrame:Hide()
 
-  PushMaster:DebugPrint("Time delta frame created as child of main frame with matching border")
   return timeDeltaFrame
 end
 
@@ -193,6 +213,8 @@ local function createMainFrame()
   frame = CreateFrame("Frame", "PushMasterMainFrame", UIParent, "BackdropTemplate")
   frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+  frame:SetFrameStrata("HIGH") -- Ensure frame appears on top
+  frame:SetFrameLevel(50)      -- High frame level to avoid being hidden
 
   -- Set backdrop for sleek design
   frame:SetBackdrop({
@@ -293,7 +315,6 @@ local function createMainFrame()
   -- Initially hide the frame
   frame:Hide()
 
-  PushMaster:DebugPrint("Fixed-layout main frame with icons created")
   return frame
 end
 
@@ -456,20 +477,66 @@ function MainFrame:UpdateDisplay(comparisonData)
     return
   end
 
-  -- DEBUG: Log suspicious values that might indicate calculation issues
-  if comparisonData.trashProgress and math.abs(comparisonData.trashProgress) > 200 then
-    PushMaster:DebugPrint(string.format("SUSPICIOUS: Trash progress value %.1f%% seems too extreme",
-      comparisonData.trashProgress))
+  -- Check if we're in recording mode (no best run data)
+  local isRecording = comparisonData.isRecording or
+      (comparisonData.progressEfficiency == nil and
+        comparisonData.trashProgress == nil and
+        comparisonData.bossProgress == nil)
+
+  -- Handle recording mode
+  if isRecording then
+    -- Set blue border
+    local borderColor = BORDER_COLORS.BLUE
+    if lastDisplayValues.borderColor ~= "recording" then
+      frame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+      if timeDeltaFrame then
+        timeDeltaFrame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+      end
+      lastDisplayValues.borderColor = "recording"
+    end
+
+    -- Hide all icons and show "Recording" text
+    for _, icon in pairs(elements.iconTextures) do
+      icon:Hide()
+    end
+    for _, text in pairs(elements.displayText) do
+      text:Hide()
+    end
+
+    -- Show recording text
+    if not elements.recordingText then
+      elements.recordingText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+      elements.recordingText:SetPoint("CENTER", frame, "CENTER", 0, -8)
+      elements.recordingText:SetTextColor(0.2, 0.5, 1.0, 1)
+    end
+    elements.recordingText:SetText("Recording")
+    elements.recordingText:Show()
+
+    -- Update keystone header
+    local dungeonName = getDungeonName(comparisonData.dungeonID)
+    local keystoneText = string.format("%s +%d", dungeonName, comparisonData.level or 0)
+    if keystoneText ~= lastDisplayValues.keystoneHeader then
+      elements.keystoneHeader:SetText(keystoneText)
+      lastDisplayValues.keystoneHeader = keystoneText
+    end
+
+    -- Hide time delta frame
+    if timeDeltaFrame then
+      timeDeltaFrame:Hide()
+    end
+
+    return
   end
 
-  if comparisonData.timeDelta and math.abs(comparisonData.timeDelta) > 1800 then -- More than 30 minutes
-    PushMaster:DebugPrint(string.format("SUSPICIOUS: Time delta %.0fs (%.1fm) seems too extreme",
-      comparisonData.timeDelta, comparisonData.timeDelta / 60))
+  -- Not recording - hide recording text and show normal elements
+  if elements.recordingText then
+    elements.recordingText:Hide()
   end
-
-  if comparisonData.progress and comparisonData.progress.trash and comparisonData.progress.trash > 100 then
-    PushMaster:DebugPrint(string.format("ISSUE: Current trash progress %.1f%% exceeds 100%%",
-      comparisonData.progress.trash))
+  for _, icon in pairs(elements.iconTextures) do
+    icon:Show()
+  end
+  for _, text in pairs(elements.displayText) do
+    text:Show()
   end
 
   -- Format display values
@@ -477,7 +544,8 @@ function MainFrame:UpdateDisplay(comparisonData)
   local trashText = formatPercentage(comparisonData.trashProgress, true)
   local bossText = formatBossCount(comparisonData.bossProgress)
   local deathText = formatDeaths(comparisonData.deathProgress, comparisonData.deathTimePenalty)
-  local keystoneText = string.format("%s +%d", comparisonData.dungeon or "Unknown", comparisonData.level or 0)
+  local dungeonName = getDungeonName(comparisonData.dungeonID)
+  local keystoneText = string.format("%s +%d", dungeonName, comparisonData.level or 0)
 
   -- Update border color based on overall performance
   local borderColor = BORDER_COLORS.NEUTRAL
@@ -568,8 +636,6 @@ function MainFrame:ResetDisplayCache()
   -- STABILITY: Reset display smoothing values
   displaySmoothing.timeDelta.lastValue = nil
   displaySmoothing.timeDelta.lastUpdateTime = 0
-
-  PushMaster:DebugPrint("Display cache reset")
 end
 
 ---Clear the comparison cache (called when run state changes)
@@ -608,7 +674,6 @@ function MainFrame:Hide()
   -- Stop test mode if it's running when main GUI is closed
   if PushMaster.UI and PushMaster.UI.TestMode and PushMaster.UI.TestMode:IsActive() then
     PushMaster.UI.TestMode:StopTest()
-    PushMaster:DebugPrint("Test mode stopped due to main GUI being closed")
   end
 
   -- Time delta frame automatically hides with parent frame
@@ -644,7 +709,6 @@ end
 ---Reset the main frame position to default
 function MainFrame:ResetPosition()
   if not frame then
-    PushMaster:DebugPrint("MainFrame not initialized, cannot reset position")
     return false
   end
 
@@ -657,7 +721,6 @@ function MainFrame:ResetPosition()
     PushMasterDB.settings.framePosition = nil
   end
 
-  PushMaster:DebugPrint("MainFrame position reset to default")
   return true
 end
 
@@ -672,7 +735,6 @@ local function loadFramePosition()
     local pos = PushMasterDB.settings.framePosition
     frame:ClearAllPoints()
     frame:SetPoint(pos.point or "CENTER", UIParent, pos.relativePoint or "CENTER", pos.x or 0, pos.y or 200)
-    PushMaster:DebugPrint("MainFrame position loaded from saved settings")
   end
 end
 
@@ -684,7 +746,6 @@ local function setupEventHandlers()
 
   -- Frame is already set up with drag handlers in createMainFrame
   -- This function is here for future event handler additions
-  PushMaster:DebugPrint("MainFrame event handlers setup")
 end
 
 ---Initialize the main frame
@@ -713,7 +774,7 @@ function MainFrame:Initialize()
     MainFrame:OnEvent(event, ...)
   end)
 
-  PushMaster:DebugPrint("MainFrame initialized with fixed-layout design and continuous updates")
+  isInitialized = true -- IMPORTANT: Mark as initialized
 end
 
 ---Handle events for auto-show/hide functionality
@@ -729,13 +790,11 @@ function MainFrame:OnEvent(event, ...)
       if inMythicPlus then
         -- Auto-show in Mythic+ dungeons
         self:Show()
-        PushMaster:DebugPrint("Auto-showing MainFrame in Mythic+ dungeon")
       else
         -- Auto-hide when leaving dungeon (unless settings panel is open)
         local settingsOpen = PushMaster.UI and PushMaster.UI.SettingsFrame and PushMaster.UI.SettingsFrame:IsShown()
         if not settingsOpen then
           self:Hide()
-          PushMaster:DebugPrint("Auto-hiding MainFrame outside Mythic+ dungeon")
         end
       end
     end

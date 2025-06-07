@@ -97,7 +97,7 @@ function PushMaster.Core.Constants:LoadMetadata()
     -- Now we can safely get metadata from TOC file
     self.ADDON_TITLE = GetAddOnMetadata(addonName, "Title") or "PushMaster"
     self.ADDON_AUTHOR = GetAddOnMetadata(addonName, "Author") or "Unknown"
-    self.ADDON_VERSION = GetAddOnMetadata(addonName, "Version") or "0.9.6"
+    self.ADDON_VERSION = GetAddOnMetadata(addonName, "Version") or "1.1.0"
     self.DESCRIPTION = GetAddOnMetadata(addonName, "Notes") or
         "Track and compare Mythic+ key performance in real-time"
 

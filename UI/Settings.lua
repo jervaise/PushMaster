@@ -1,1 +1,0 @@
--- Settings tab content and configuration controls

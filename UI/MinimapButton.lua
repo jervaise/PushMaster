@@ -120,15 +120,13 @@ function MinimapButton:OnTooltipShow(tooltip)
   tooltip:AddLine("Left Click: Open settings", 0.7, 0.7, 0.7)
 
   -- Show current tracking status
-  if PushMaster.Data and PushMaster.Data.Calculator then
-    local isTracking = PushMaster.Data.Calculator:IsTrackingRun()
-    if isTracking then
-      local currentRun = PushMaster.Data.Calculator:GetCurrentRun()
-      if currentRun and currentRun.instanceData then
-        tooltip:AddLine(" ")
-        tooltip:AddLine("Currently tracking:", 0, 1, 0)
-        tooltip:AddLine(currentRun.instanceData.zoneName .. " +" .. currentRun.instanceData.cmLevel, 1, 1, 0)
-      end
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API and API:IsTrackingRun() then
+    local comparison = API:GetCurrentComparison()
+    if comparison then
+      tooltip:AddLine(" ")
+      tooltip:AddLine("Currently tracking:", 0, 1, 0)
+      tooltip:AddLine(comparison.dungeon .. " +" .. comparison.level, 1, 1, 0)
     end
   end
 
@@ -213,13 +211,10 @@ StaticPopupDialogs["PUSHMASTER_RESET_CONFIRM"] = {
   button1 = "Yes",
   button2 = "No",
   OnAccept = function()
-    if PushMaster.Data.Calculator then
-      if PushMaster.Data.Calculator:ClearBestTimes() then
-        PushMaster:Print("All best times have been cleared.")
-      else
-        PushMaster:Print("No best times data to clear.")
-      end
-    end
+    -- In the simplified system, we don't support clearing best times
+    -- They are automatically replaced when a better run is completed
+    PushMaster:Print(
+      "Best times cannot be manually cleared. They are automatically replaced when you complete a faster run.")
   end,
   timeout = 0,
   whileDead = true,

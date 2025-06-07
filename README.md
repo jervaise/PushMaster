@@ -1,6 +1,6 @@
 # PushMaster - Enhanced AI-Powered Mythic+ Analyzer
 
-![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-brightgreen.svg)
 ![WoW Version](https://img.shields.io/badge/WoW-11.1.5+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
@@ -165,4 +165,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**PushMaster v1.0.0** - Enhanced AI-powered Mythic+ analysis. Push keys with confidence! 🚀 
+**PushMaster v1.1.0** - Enhanced AI-powered Mythic+ analysis. Push keys with confidence! 🚀 

@@ -10,11 +10,12 @@ PushMaster = LibStub("AceAddon-3.0"):NewAddon("PushMaster", "AceConsole-3.0", "A
 addonTable.PushMaster = PushMaster
 
 -- Metadata will be loaded after ADDON_LOADED event
-PushMaster.version = "1.0.2"
+PushMaster.version = "1.1.0"
 PushMaster.author = "Jervaise"
+PushMaster.name = addonName
 
 -- Debug mode flag
-local debugMode = true
+local debugMode = false
 
 -- CRITICAL FIX: Add retry counter to prevent infinite timer recursion
 local metadataRetryCount = 0
@@ -85,7 +86,7 @@ local function onAddonLoaded(loadedAddonName)
         lock = false
       },
       -- Metadata for debugging and support
-      version = "1.0.2", -- Use hardcoded version for initial setup
+      version = "1.1.0", -- Use hardcoded version for initial setup
       author = "Jervaise",
       lastLogin = nil,
       installDate = nil
@@ -152,12 +153,12 @@ local function onPlayerLogin()
     else
       -- Use more informative message - this is normal behavior, not an error
       PushMaster:DebugPrint("Metadata API not available after retries, using built-in values (this is normal)")
-      PushMaster.version = "1.0.2"
+      PushMaster.version = "1.1.0"
       PushMaster.author = "Jervaise"
     end
   else
     -- Successfully got GetAddOnMetadata, load real values
-    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "1.0.2"
+    PushMaster.version = GetAddOnMetadata(addonName, "Version") or "1.1.0"
     PushMaster.author = GetAddOnMetadata(addonName, "Author") or "Jervaise"
 
     -- Only show debug message if we actually loaded from TOC
@@ -205,8 +206,11 @@ local function onPlayerLogin()
     if PushMaster.Data.EventHandlers:IsInMythicPlus() then
       PushMaster:DebugPrint("Already in Mythic+ dungeon, resuming tracking")
       local instanceData = PushMaster.Data.EventHandlers:GetCurrentInstanceData()
-      if instanceData and PushMaster.Data.Calculator then
-        PushMaster.Data.Calculator:StartNewRun(instanceData)
+      if instanceData then
+        local API = PushMaster.Core and PushMaster.Core.API
+        if API then
+          API:StartNewRun(instanceData.currentMapID, instanceData.cmLevel, instanceData.affixes)
+        end
       end
     end
   end
@@ -272,21 +276,37 @@ function PushMaster:InitializeModules()
       self.Core.Utils:Initialize()
       self:DebugPrint("Utils module initialized")
     end
+    if self.Core.Performance then
+      self.Core.Performance:Initialize()
+      self:DebugPrint("Performance module initialized")
+    end
+    if self.Core.API then
+      self.Core.API:Initialize()
+      self:DebugPrint("API module initialized")
+    end
+  end
+
+  -- Initialize Calculations modules
+  if self.Calculations then
+    if self.Calculations.Efficiency then
+      -- Efficiency module doesn't need initialization
+      self:DebugPrint("Efficiency module loaded")
+    end
   end
 
   -- Initialize Data modules (DungeonData, Calculator, EventHandlers)
   if self.Data then
-    if self.Data.DungeonData then
-      self.Data.DungeonData:Initialize()
-      self:DebugPrint("DungeonData module initialized")
+    if self.Data.Timeline then
+      self.Data.Timeline:Initialize()
+      self:DebugPrint("Timeline module initialized")
+    end
+    if self.Data.Extrapolation then
+      self.Data.Extrapolation:Initialize()
+      self:DebugPrint("Extrapolation module initialized")
     end
     if self.Data.Calculator then
       self.Data.Calculator:Initialize()
       self:DebugPrint("Calculator module initialized")
-    end
-    if self.Data.BaselineBestTimes then
-      self.Data.BaselineBestTimes:Initialize()
-      self:DebugPrint("BaselineBestTimes module initialized")
     end
     if self.Data.EventHandlers then
       self.Data.EventHandlers:Initialize()
@@ -354,55 +374,13 @@ _G.PushMaster = PushMaster
 SLASH_PUSHMASTER1 = "/pm"
 
 SlashCmdList["PUSHMASTER"] = function(msg)
-  local command = string.lower((msg or ""):match("^%s*(.-)%s*$"))
-
-  if command == "debug" then
-    -- Toggle debug mode
-    PushMaster:ToggleDebug()
-  elseif command == "test" then
-    -- Start test mode
-    if PushMaster.UI and PushMaster.UI.TestMode then
-      PushMaster.UI.TestMode:StartTest()
+  -- Always show settings frame on /pm
+  if PushMaster.UI and PushMaster.UI.SettingsFrame then
+    local settings = PushMaster.UI.SettingsFrame
+    if settings:IsShown() then
+      settings:Hide()
     else
-      PushMaster:Print("Test mode not available")
-    end
-  elseif command == "stoptest" then
-    -- Stop test mode
-    if PushMaster.UI and PushMaster.UI.TestMode then
-      if PushMaster.UI.TestMode:IsActive() then
-        PushMaster.UI.TestMode:StopTest()
-      else
-        PushMaster:Print("Test mode is not currently active")
-      end
-    else
-      PushMaster:Print("Test mode not available")
-    end
-  elseif command == "reset" then
-    -- Reset current run
-    if PushMaster.Data and PushMaster.Data.Calculator then
-      PushMaster.Data.Calculator:ResetCurrentRun()
-      PushMaster:Print("Current run reset")
-    else
-      PushMaster:Print("Calculator not available")
-    end
-  elseif command == "help" then
-    -- Show help
-    PushMaster:Print("Available commands:")
-    PushMaster:Print("  /pm - Toggle settings frame")
-    PushMaster:Print("  /pm debug - Toggle debug mode")
-    PushMaster:Print("  /pm test - Start test mode")
-    PushMaster:Print("  /pm stoptest - Stop test mode")
-    PushMaster:Print("  /pm reset - Reset current run")
-    PushMaster:Print("  /pm help - Show this help")
-  else
-    -- Default behavior: Toggle settings frame on /pm (same as minimap left-click)
-    if PushMaster.UI and PushMaster.UI.SettingsFrame then
-      local settings = PushMaster.UI.SettingsFrame
-      if settings:IsShown() then
-        settings:Hide()
-      else
-        settings:Show()
-      end
+      settings:Show()
     end
   end
 end

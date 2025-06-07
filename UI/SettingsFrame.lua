@@ -219,39 +219,30 @@ local function createSettingsFrame()
   leftBox:SetBackdropColor(0, 0, 0, 0.7)
   leftBox:SetBackdropBorderColor(0.4, 0.4, 0.4, 0.8)
 
-  -- Configuration title (centered like Test Mode)
+  -- Configuration section title
   local configTitle = leftBox:CreateFontString(nil, "OVERLAY")
   configTitle:SetFont(ADDON_FONT, 14, "OUTLINE")
   configTitle:SetPoint("TOP", leftBox, "TOP", 0, -20)
   configTitle:SetText("Configuration")
   configTitle:SetTextColor(classColor.r, classColor.g, classColor.b)
 
-  -- Configuration description (like Test Mode)
-  local configDesc = leftBox:CreateFontString(nil, "OVERLAY")
-  configDesc:SetFont(ADDON_FONT, 10)
-  configDesc:SetPoint("TOP", configTitle, "BOTTOM", 0, -10)
-  configDesc:SetWidth(220)
-  configDesc:SetJustifyH("CENTER")
-  configDesc:SetText("Configure general PushMaster settings and preferences")
-  configDesc:SetTextColor(0.8, 0.8, 0.8)
-
-  -- Enable PushMaster checkbox (moved to the right)
+  -- Enable/Disable checkbox
   elements.enableCheckbox = createCheckbox(
     leftBox,
     "PushMasterEnableCheckbox",
     "Enable PushMaster",
     "Enable or disable the PushMaster addon"
   )
-  elements.enableCheckbox:SetPoint("TOPLEFT", leftBox, "TOPLEFT", 35, -95)
+  elements.enableCheckbox:SetPoint("TOPLEFT", leftBox, "TOPLEFT", 20, -50)
 
-  -- Show minimap icon checkbox (closer spacing)
+  -- Show minimap icon checkbox
   elements.minimapCheckbox = createCheckbox(
     leftBox,
     "PushMasterMinimapCheckbox",
     "Show Minimap Icon",
     "Show or hide the minimap button"
   )
-  elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -10)
+  elements.minimapCheckbox:SetPoint("TOPLEFT", elements.enableCheckbox, "BOTTOMLEFT", 0, -5)
 
   -- Key Level Extrapolation checkbox
   elements.extrapolationCheckbox = createCheckbox(
@@ -260,12 +251,12 @@ local function createSettingsFrame()
     "Key Level Extrapolation",
     "Compare against lower key levels when no data exists for current level.\nUses mythic+ scaling to estimate performance at higher keys."
   )
-  elements.extrapolationCheckbox:SetPoint("TOPLEFT", elements.minimapCheckbox, "BOTTOMLEFT", 0, -10)
+  elements.extrapolationCheckbox:SetPoint("TOPLEFT", elements.minimapCheckbox, "BOTTOMLEFT", 0, -5)
 
-  -- Frame Scale section (more space above it)
+  -- Frame Scale section
   local scaleLabel = leftBox:CreateFontString(nil, "OVERLAY")
   scaleLabel:SetFont(ADDON_FONT, 10)
-  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -160)
+  scaleLabel:SetPoint("TOP", configTitle, "BOTTOM", 0, -125)
   scaleLabel:SetText("Frame Scale:")
   scaleLabel:SetTextColor(1, 1, 1)
 
@@ -277,7 +268,7 @@ local function createSettingsFrame()
   elements.scaleSlider:SetValueStep(0.1)
   elements.scaleSlider:SetObeyStepOnDrag(true)
 
-  -- Scale slider value text (centered)
+  -- Scale slider value text
   local scaleText = elements.scaleSlider:CreateFontString(nil, "OVERLAY")
   scaleText:SetFont(ADDON_FONT, 10)
   scaleText:SetPoint("TOP", elements.scaleSlider, "BOTTOM", 0, -5)
@@ -289,6 +280,47 @@ local function createSettingsFrame()
   elements.scaleSlider.Low:SetText("50%")
   elements.scaleSlider.High:SetText("150%")
   elements.scaleSlider.Text:SetText("")
+
+  -- Performance/Accuracy slider
+  local accuracyLabel = leftBox:CreateFontString(nil, "OVERLAY")
+  accuracyLabel:SetFont(ADDON_FONT, 10)
+  accuracyLabel:SetPoint("TOP", elements.scaleSlider, "BOTTOM", 0, -20)
+  accuracyLabel:SetText("Accuracy:")
+  accuracyLabel:SetTextColor(1, 1, 1)
+
+  elements.accuracySlider = CreateFrame("Slider", "PushMasterAccuracySlider", leftBox, "OptionsSliderTemplate")
+  elements.accuracySlider:SetSize(180, 20)
+  elements.accuracySlider:SetPoint("TOP", accuracyLabel, "BOTTOM", 0, -10)
+  elements.accuracySlider:SetMinMaxValues(1, 3)
+  elements.accuracySlider:SetValue(2)
+  elements.accuracySlider:SetValueStep(1)
+  elements.accuracySlider:SetObeyStepOnDrag(true)
+
+  -- Accuracy slider value text
+  local accuracyText = elements.accuracySlider:CreateFontString(nil, "OVERLAY")
+  accuracyText:SetFont(ADDON_FONT, 10)
+  accuracyText:SetPoint("TOP", elements.accuracySlider, "BOTTOM", 0, -5)
+  accuracyText:SetText("Balanced")
+  accuracyText:SetTextColor(1, 1, 1)
+  elements.accuracySlider.text = accuracyText
+
+  -- Accuracy slider labels
+  elements.accuracySlider.Low:SetText("Light")
+  elements.accuracySlider.High:SetText("Aggressive")
+  elements.accuracySlider.Text:SetText("")
+
+  -- Add tooltip for accuracy slider
+  elements.accuracySlider:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Performance vs Accuracy", 1, 1, 1)
+    GameTooltip:AddLine("Light: Lower CPU usage, less frequent updates", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Balanced: Moderate CPU usage, standard updates", 0.9, 0.9, 0.9, true)
+    GameTooltip:AddLine("Aggressive: Higher CPU usage, more frequent updates", 0.9, 0.9, 0.9, true)
+    GameTooltip:Show()
+  end)
+  elements.accuracySlider:SetScript("OnLeave", function()
+    GameTooltip:Hide()
+  end)
 
   -- === RIGHT BOX - TEST MODE ===
   local rightBox = CreateFrame("Frame", nil, contentArea, "BackdropTemplate")
@@ -339,16 +371,22 @@ local function createSettingsFrame()
     end
   end
 
+  -- Create divider line
+  local divider = rightBox:CreateTexture(nil, "ARTWORK")
+  divider:SetSize(200, 1)
+  divider:SetPoint("TOP", elements.testButton, "BOTTOM", 0, -20)
+  divider:SetColorTexture(0.4, 0.4, 0.4, 0.8)
+
   -- Reset position button
   elements.resetPosButton = CreateFrame("Button", "PushMasterResetPosButton", rightBox, "UIPanelButtonTemplate")
   elements.resetPosButton:SetSize(140, 30)
-  elements.resetPosButton:SetPoint("TOP", elements.testButton, "BOTTOM", 0, -15)
+  elements.resetPosButton:SetPoint("TOP", divider, "BOTTOM", 0, -20)
   elements.resetPosButton:SetText("Reset Position")
 
   -- Clear data button
   elements.clearDataButton = CreateFrame("Button", "PushMasterClearDataButton", rightBox, "UIPanelButtonTemplate")
   elements.clearDataButton:SetSize(140, 30)
-  elements.clearDataButton:SetPoint("TOP", elements.resetPosButton, "BOTTOM", 0, -15)
+  elements.clearDataButton:SetPoint("TOP", elements.resetPosButton, "BOTTOM", 0, -10)
   elements.clearDataButton:SetText("Clear Best Times")
 
   -- === FOOTER WITH VERSION INFO ===
@@ -406,9 +444,25 @@ local function loadSettings()
   elements.scaleSlider:SetValue(scale)
   elements.scaleSlider.text:SetText(string.format("%.0f%%", scale * 100))
 
+  -- Load accuracy setting
+  local accuracy = 2 -- Default to Balanced
+  if PushMasterDB and PushMasterDB.settings and PushMasterDB.settings.accuracy then
+    accuracy = PushMasterDB.settings.accuracy
+    accuracy = math.max(1, math.min(3, accuracy))
+  end
+  elements.accuracySlider:SetValue(accuracy)
+  local accuracyTexts = { [1] = "Light", [2] = "Balanced", [3] = "Aggressive" }
+  elements.accuracySlider.text:SetText(accuracyTexts[accuracy])
+
+  -- Apply performance profile on load
+  if PushMaster.Core and PushMaster.Core.Performance then
+    local profiles = { [1] = "LOW", [2] = "BALANCED", [3] = "HIGH" }
+    PushMaster.Core.Performance:SetProfile(profiles[accuracy])
+  end
+
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "0.9.6"   -- Fallback version
+    local version = "1.1.0"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -456,6 +510,7 @@ local function saveSettings()
     PushMasterDB.settings.enabled = elements.enableCheckbox:GetChecked()
     PushMasterDB.settings.frameScale = elements.scaleSlider:GetValue()
     PushMasterDB.settings.enableExtrapolation = elements.extrapolationCheckbox:GetChecked()
+    PushMasterDB.settings.accuracy = elements.accuracySlider:GetValue()
   end
 
   local showMinimap = elements.minimapCheckbox:GetChecked()
@@ -496,6 +551,19 @@ local function setupEventHandlers()
     local percentage = string.format("%.0f%%", value * 100)
     self.text:SetText(percentage)
     saveSettings()
+  end)
+
+  -- Accuracy slider handler
+  elements.accuracySlider:SetScript("OnValueChanged", function(self, value)
+    local accuracyTexts = { [1] = "Light", [2] = "Balanced", [3] = "Aggressive" }
+    self.text:SetText(accuracyTexts[value])
+    saveSettings()
+
+    -- Update Performance module settings
+    if PushMaster.Core and PushMaster.Core.Performance then
+      local profiles = { [1] = "LOW", [2] = "BALANCED", [3] = "HIGH" }
+      PushMaster.Core.Performance:SetProfile(profiles[value])
+    end
   end)
 
   -- Test mode button (toggle functionality)
@@ -605,15 +673,20 @@ function SettingsFrame:Hide()
   if frame then
     frame:Hide()
 
-    -- Hide main frame when settings panel closes (unless in +12 or higher key)
-    if PushMaster.UI and PushMaster.UI.MainFrame then
-      -- Only hide if not in a +12 or higher Mythic+ dungeon
-      if PushMaster.Data and PushMaster.Data.EventHandlers and not PushMaster.Data.EventHandlers:IsInHighKey() then
-        PushMaster.UI.MainFrame:Hide()
+    -- Stop test mode if running
+    if PushMaster.UI and PushMaster.UI.TestMode and PushMaster.UI.TestMode:IsActive() then
+      PushMaster.UI.TestMode:StopTest()
+      if elements.testButton then
+        elements.testButton:SetText("Start Test Mode")
       end
     end
 
-    PushMaster:DebugPrint("Settings frame hidden")
+    -- Hide main frame when settings panel closes (unless in a mythic+ dungeon)
+    if PushMaster.UI and PushMaster.UI.MainFrame then
+      if PushMaster.Data and PushMaster.Data.EventHandlers and not PushMaster.Data.EventHandlers:IsInMythicPlus() then
+        PushMaster.UI.MainFrame:Hide()
+      end
+    end
   end
 end
 
@@ -726,7 +799,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "0.9.6"   -- Fallback version
+    local version = "1.1.0"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first

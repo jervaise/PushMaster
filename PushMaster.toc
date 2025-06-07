@@ -1,8 +1,8 @@
 ## Interface: 110105
 ## Title: PushMaster
-## Notes: Real-time Mythic+ delta analyzer with enhanced AI predictions - shows if you're ahead/behind your best pace for key pushing
+## Notes: Real-time Mythic+ pace comparison against your best runs
+## Version: 1.1.0
 ## Author: Jervaise
-## Version: 1.0.2
 ## IconTexture: Interface\AddOns\PushMaster\Media\flash
 ## SavedVariables: PushMasterDB
 ## OptionalDeps: LibStub, LibDataBroker-1.1, LibDBIcon-1.0, CallbackHandler-1.0, AceAddon-3.0, AceConsole-3.0, AceEvent-3.0
@@ -24,9 +24,16 @@ Core\Constants.lua
 Core\Config.lua
 Core\Utils.lua
 Core\Database.lua
+Core\Performance.lua
+Core\API.lua
 Core\Init.lua
 
+# Calculations modules
+Calculations\Efficiency.lua
+
 # Data modules
+Data\Timeline.lua
+Data\Extrapolation.lua
 Data\Calculator.lua
 Data\EventHandlers.lua
 

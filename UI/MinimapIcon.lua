@@ -1,1 +1,0 @@
--- Minimap icon integration and management

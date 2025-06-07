@@ -120,7 +120,7 @@ local function getCurrentTrashProgress()
   -- DEBUG: Log when we have to clamp values
   if originalPercentage > 100 then
     PushMaster:DebugPrint(string.format(
-    "WARNING: Trash percentage exceeded 100%% - API returned %.2f%%, clamped to %.2f%%", originalPercentage, percentage))
+      "WARNING: Trash percentage exceeded 100%% - API returned %.2f%%, clamped to %.2f%%", originalPercentage, percentage))
     PushMaster:DebugPrint(string.format(
       "Raw API data - quantity: %s, totalQuantity: %s, isWeighted: %s, quantityString: %s",
       tostring(criteriaInfo.quantity),
@@ -135,7 +135,8 @@ end
 ---Timer-based progress checker (backup for when events stop firing)
 local function checkProgressTimer()
   -- Only run if we're tracking a run
-  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
@@ -149,10 +150,8 @@ local function checkProgressTimer()
   if math.abs(currentTrash - (lastTrashPercent or 0)) > epsilon then
     lastTrashPercent = currentTrash
 
-    -- Update progress in Calculator
-    PushMaster.Data.Calculator:UpdateProgress({
-      trash = currentTrash
-    })
+    -- Update progress through API
+    API:UpdateProgress(currentTrash, nil, nil)
   end
 end
 
@@ -302,17 +301,18 @@ local function onChallengeModeStart(...)
     return
   end
 
-  -- Only track keys +12 and above
-  if instanceData.cmLevel < 12 then
+  -- Only track keys +2 and above (users can configure this in settings)
+  if instanceData.cmLevel < 2 then
     PushMaster:DebugPrint("Key level " .. instanceData.cmLevel .. " below threshold, not tracking")
     return
   end
 
   PushMaster:Print("Starting tracking for " .. instanceData.zoneName .. " +" .. instanceData.cmLevel)
 
-  -- Start tracking in Calculator
-  if PushMaster.Data.Calculator then
-    PushMaster.Data.Calculator:StartNewRun(instanceData)
+  -- Start tracking through API
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    API:StartNewRun(instanceData.currentMapID, instanceData.cmLevel, instanceData.affixes)
   end
 
   -- Start the progress check timer (backup system)
@@ -332,9 +332,18 @@ local function onChallengeModeCompleted(...)
   -- Stop the progress check timer
   stopProgressTimer()
 
-  -- Complete the run in Calculator
-  if PushMaster.Data.Calculator then
-    PushMaster.Data.Calculator:CompleteCurrentRun()
+  -- Complete the run through API
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    -- Get completion info from WoW API
+    local mapID = C_ChallengeMode.GetActiveChallengeMapID()
+    local level, time, onTime = C_ChallengeMode.GetCompletionInfo()
+
+    if time then
+      API:StopRun(true, onTime)
+    else
+      API:StopRun(false, false)
+    end
   end
 
   -- Keep UI visible for a moment to show final results
@@ -349,9 +358,10 @@ local function onChallengeModeReset(...)
   -- Stop the progress check timer
   stopProgressTimer()
 
-  -- Reset tracking in Calculator
-  if PushMaster.Data.Calculator then
-    PushMaster.Data.Calculator:ResetCurrentRun()
+  -- Reset tracking through API
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    API:ResetCurrentRun()
   end
 
   -- Hide UI
@@ -367,24 +377,19 @@ end
 ---@param groupSize number The group size
 local function onEncounterStart(encounterID, encounterName, difficultyID, groupSize)
   -- Only process if we're tracking a run
-  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
   PushMaster:DebugPrint("Boss encounter started: " ..
     (encounterName or "Unknown") .. " (ID: " .. (encounterID or "Unknown") .. ")")
 
-  -- Store encounter start time for potential use
-  local startTime = GetTime()
-  if not PushMaster.Data.Calculator.currentEncounter then
-    PushMaster.Data.Calculator.currentEncounter = {}
+  -- Let Calculator handle boss tracking through API
+  local Calculator = PushMaster.Data and PushMaster.Data.Calculator
+  if Calculator then
+    Calculator:StartBossFight(encounterName or ("Boss " .. (encounterID or "Unknown")))
   end
-
-  PushMaster.Data.Calculator.currentEncounter = {
-    id = encounterID,
-    name = encounterName,
-    startTime = startTime
-  }
 end
 
 ---Handle encounter end event (boss kills)
@@ -395,24 +400,27 @@ end
 ---@param success boolean Whether the encounter was successful
 local function onEncounterEnd(encounterID, encounterName, difficultyID, groupSize, success)
   -- Only process if we're tracking a run
-  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
   if success then
     PushMaster:DebugPrint("Boss encounter completed successfully: " .. (encounterName or "Unknown"))
 
-    -- Record the boss kill
-    if PushMaster.Data.Calculator then
-      PushMaster.Data.Calculator:RecordBossKill(encounterName or ("Boss " .. (encounterID or "Unknown")))
+    -- Record the boss kill through Calculator
+    local Calculator = PushMaster.Data and PushMaster.Data.Calculator
+    if Calculator then
+      Calculator:EndBossFight(encounterName or ("Boss " .. (encounterID or "Unknown")))
+
+      -- Update boss count through API
+      local currentState = Calculator:GetCurrentState()
+      if currentState then
+        API:UpdateProgress(nil, currentState.bosses, nil)
+      end
     end
   else
     PushMaster:DebugPrint("Boss encounter failed: " .. (encounterName or "Unknown"))
-  end
-
-  -- Clear current encounter data
-  if PushMaster.Data.Calculator.currentEncounter then
-    PushMaster.Data.Calculator.currentEncounter = nil
   end
 end
 
@@ -426,7 +434,8 @@ local function onScenarioCriteriaUpdate(...)
   end
 
   -- Only process if we're tracking a run
-  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
@@ -447,10 +456,8 @@ local function onScenarioCriteriaUpdate(...)
   lastTrashPercent = currentTrash
   lastUpdateTime = now
 
-  -- Update progress in Calculator (Calculator will handle milestone recording)
-  PushMaster.Data.Calculator:UpdateProgress({
-    trash = currentTrash
-  })
+  -- Update progress through API
+  API:UpdateProgress(currentTrash, nil, nil)
 end
 
 ---Handle player entering world (for reconnections, reloads)
@@ -466,8 +473,9 @@ local function onPlayerEnteringWorld(...)
     onChallengeModeStart()
   else
     -- Not in M+, ensure UI is hidden and tracking is stopped
-    if PushMaster.Data.Calculator then
-      PushMaster.Data.Calculator:ResetCurrentRun()
+    local API = PushMaster.Core and PushMaster.Core.API
+    if API then
+      API:ResetCurrentRun()
     end
     if PushMaster.UI and PushMaster.UI.MainFrame then
       PushMaster.UI.MainFrame:Hide()
@@ -480,7 +488,8 @@ end
 ---@param ... any Combat log event arguments
 local function onCombatLogEventUnfiltered(...)
   -- Early exit if not tracking
-  if not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
@@ -523,8 +532,15 @@ local function onCombatLogEventUnfiltered(...)
 
     if isPartyMember then
       PushMaster:DebugPrint("Player death detected: " .. (destName or "Unknown"))
-      if PushMaster.Data.Calculator then
-        PushMaster.Data.Calculator:RecordDeath(timestamp, destGUID)
+      local Calculator = PushMaster.Data and PushMaster.Data.Calculator
+      if Calculator then
+        Calculator:RecordDeath(destName)
+
+        -- Update death count through API
+        local currentState = Calculator:GetCurrentState()
+        if currentState then
+          API:UpdateProgress(nil, nil, currentState.deaths)
+        end
       end
     end
   end
@@ -535,7 +551,8 @@ end
 ---@param elapsedTime number The elapsed time from Blizzard's timer
 local function onBlizzardTimerUpdate(self, elapsedTime)
   -- Check if PushMaster and its modules are loaded and active
-  if not PushMaster or not PushMaster.Data or not PushMaster.Data.Calculator or not PushMaster.Data.Calculator:IsTrackingRun() then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API or not API:IsTrackingRun() then
     return
   end
 
@@ -546,9 +563,8 @@ local function onBlizzardTimerUpdate(self, elapsedTime)
   end
   lastTimerUpdate = now
 
-  -- Pass the authoritative elapsed time to the Calculator's UpdateProgress
-  -- We only pass elapsedTime here. Trash and other progress will be updated by their respective events.
-  PushMaster.Data.Calculator:UpdateProgress({ elapsedTime = elapsedTime })
+  -- Timer updates are handled internally by Calculator through elapsed time
+  -- We don't need to explicitly update through API for timer ticks
 end
 
 ---Handle zone change event

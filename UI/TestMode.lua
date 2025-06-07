@@ -212,24 +212,21 @@ function TestMode:setupFakeBestTime()
     return
   end
 
-  -- Get reference to Calculator
-  local Calculator = PushMaster.Data.Calculator
-  if not Calculator then
-    PushMaster:DebugPrint("Calculator module not available")
+  -- Get reference to Database
+  local Database = PushMaster.Core and PushMaster.Core.Database
+  if not Database then
+    PushMaster:DebugPrint("Database module not available")
     return
   end
 
   -- CRITICAL FIX: Store original best times before overwriting with fake data
-  originalBestTimes = Calculator:ExportBestTimes()
-  PushMaster:DebugPrint("Stored original best times for restoration after test mode")
+  -- For now, we'll save the current best run for this dungeon/level
+  originalBestRun = Database:GetBestRun(testRunData.mapID, testRunData.keyLevel)
 
-  -- Access the bestTimes storage directly (we need to inject fake data)
-  -- Since bestTimes is local in Calculator, we'll use the import function
-  local fakeBestTimes = {}
-  fakeBestTimes[testRunData.mapID] = {}
+  PushMaster:DebugPrint("Stored original best run for restoration after test mode")
 
-  -- Generate deathTimes array based on best run's death count
-  local deathTimes = {}
+  -- Generate death log based on best run's death count
+  local deathLog = {}
   local bestRunDeaths = testRunData.bestRunData.deaths or 0
   local bestRunTime = testRunData.bestRunData.time
 
@@ -237,40 +234,96 @@ function TestMode:setupFakeBestTime()
     -- Distribute deaths evenly throughout the best run time for realistic comparison
     local timeInterval = bestRunTime / (bestRunDeaths + 1)
     for i = 1, bestRunDeaths do
-      table.insert(deathTimes, timeInterval * i)
+      table.insert(deathLog, {
+        player = "TestPlayer" .. i,
+        time = timeInterval * i
+      })
     end
   end
 
-  -- Build fake best-time entry directly using new trashSamples
-  local fakeEntry = {
-    time = testRunData.bestRunData.time,
-    date = date("%Y-%m-%d %H:%M:%S"),
-    deaths = testRunData.bestRunData.deaths,
-    deathTimes = deathTimes, -- Add the missing deathTimes array
-    affixes = testRunData.affixes,
-    bossKillTimes = testRunData.bestRunData.bossKillTimes,
-    trashSamples = testRunData.bestRunData.trashSamples or {}
+  -- Build fake best run data with timeline
+  local timeline = {}
+
+  -- CRITICAL: Add initial timeline entry at time 0
+  table.insert(timeline, {
+    time = 0,
+    trash = 0,
+    bosses = 0,
+    deaths = 0
+  })
+
+  -- Convert trashSamples to timeline format
+  if testRunData.bestRunData.trashSamples then
+    for _, sample in ipairs(testRunData.bestRunData.trashSamples) do
+      table.insert(timeline, {
+        time = sample.time,
+        trash = sample.trash,
+        bosses = 0, -- Will be updated based on boss kill times
+        deaths = 0  -- Will be updated based on death times
+      })
+    end
+  end
+
+  -- Update timeline with boss kills
+  if testRunData.bestRunData.bossKillTimes then
+    for _, bossKill in ipairs(testRunData.bestRunData.bossKillTimes) do
+      -- Find the timeline entry closest to this boss kill time
+      for _, entry in ipairs(timeline) do
+        if entry.time >= bossKill.killTime then
+          entry.bosses = bossKill.bossNumber
+          break
+        end
+      end
+    end
+  end
+
+  -- Update timeline with deaths
+  local deathCount = 0
+  for _, death in ipairs(deathLog) do
+    deathCount = deathCount + 1
+    for _, entry in ipairs(timeline) do
+      if entry.time >= death.time then
+        entry.deaths = deathCount
+      end
+    end
+  end
+
+  -- Sort timeline by time to ensure chronological order
+  table.sort(timeline, function(a, b) return a.time < b.time end)
+
+  -- Create fake run data
+  local fakeRunData = {
+    totalTime = testRunData.bestRunData.time,
+    timeLimit = testRunData.timeLimit,
+    timeline = timeline,
+    bossFights = testRunData.bestRunData.bossKillTimes or {},
+    deaths = bestRunDeaths,
+    deathLog = deathLog,
+    finalTrash = 100,
+    finalBosses = testRunData.bestRunData.bossKillTimes and #testRunData.bestRunData.bossKillTimes or 0,
+    dungeonID = testRunData.mapID,
+    keyLevel = testRunData.keyLevel,
+    timestamp = time(),
+    date = date("%Y-%m-%d %H:%M:%S")
   }
-  fakeBestTimes[testRunData.mapID][testRunData.keyLevel] = fakeEntry
 
-  -- Import the fake best times into Calculator
-  Calculator:ImportBestTimes(fakeBestTimes)
+  -- Save fake best run to database
+  Database:SaveRun(testRunData.mapID, testRunData.keyLevel, fakeRunData)
 
-  PushMaster:DebugPrint(string.format("Fake best time set up: %s +%d (%.1fs) with %d deaths at times: %s",
-    testRunData.name, testRunData.keyLevel, testRunData.bestRunData.time,
-    bestRunDeaths, table.concat(deathTimes, "s, ") .. (bestRunDeaths > 0 and "s" or "")))
+  PushMaster:DebugPrint(string.format("Fake best time set up: %s +%d (%.1fs) with %d deaths",
+    testRunData.name, testRunData.keyLevel, testRunData.bestRunData.time, bestRunDeaths))
 end
 
----Update test display with real Calculator comparison data
+---Update test display with real API comparison data
 ---@param currentTime number Current test time
 function TestMode:updateTestDisplay(currentTime)
-  local Calculator = PushMaster.Data.Calculator
-  if not Calculator then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API then
     return
   end
 
-  -- Get real comparison data from Calculator
-  local comparison = Calculator:GetCurrentComparison()
+  -- Get real comparison data from API
+  local comparison = API:GetCurrentComparison()
   if not comparison then
     return
   end
@@ -325,9 +378,9 @@ function TestMode:testLoop()
     -- If we've reached the end of the test progression, complete the test
     if currentTime >= prevStage.time then
       -- Show final comparison only
-      local Calculator = PushMaster.Data.Calculator
-      if Calculator then
-        local comparison = Calculator:GetCurrentComparison()
+      local API = PushMaster.Core and PushMaster.Core.API
+      if API then
+        local comparison = API:GetCurrentComparison()
         if comparison then
           PushMaster:Print(string.format("Run complete! Efficiency %+d%% | Trash %+d%% | Boss %+d | Deaths %+d",
             comparison.progressEfficiency,
@@ -395,9 +448,9 @@ function TestMode:testLoop()
         PushMaster:Print(prevStage.message)
 
         -- Show comprehensive debug information only at milestones
-        local Calculator = PushMaster.Data.Calculator
-        if Calculator then
-          local comparison = Calculator:GetCurrentComparison()
+        local API = PushMaster.Core and PushMaster.Core.API
+        if API then
+          local comparison = API:GetCurrentComparison()
           if comparison then
             -- Show the detailed breakdown with full descriptive words for clarity
             PushMaster:Print(string.format("  * Time %.0fs | Current Run: Trash:%.0f%% Bosses:%d Deaths:%d",
@@ -450,10 +503,10 @@ function TestMode:StartTest()
   -- Stop any existing test
   self:StopTest()
 
-  -- Explicitly reset Calculator to ensure clean state
-  local Calculator = PushMaster.Data.Calculator
-  if Calculator then
-    Calculator:ResetCurrentRun()
+  -- Explicitly reset through API to ensure clean state
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    API:ResetCurrentRun()
   end
 
   testRunData = SAMPLE_RUN_DATA[runIndex]
@@ -469,15 +522,27 @@ function TestMode:StartTest()
     end
     PushMaster.UI.MainFrame:Show()
 
+    -- Double-check that it's actually shown
+    if not PushMaster.UI.MainFrame:IsShown() then
+      PushMaster:Print("WARNING: MainFrame failed to show!")
+    end
+
     -- Reset MainFrame to default state before starting test
     local defaultData = {
       progressEfficiency = 0,
       trashProgress = 0,
       bossProgress = 0,
       progress = { deaths = 0 },
-      deathTimePenalty = 0
+      deathTimePenalty = 0,
+      dungeon = testRunData.name,
+      level = testRunData.keyLevel,
+      dungeonID = testRunData.mapID,
+      timeDelta = 0,
+      timeConfidence = 0
     }
     PushMaster.UI.MainFrame:UpdateDisplay(defaultData)
+  else
+    PushMaster:Print("ERROR: MainFrame module not loaded!")
   end
 
   -- Temporarily disable debug mode to reduce spam
@@ -493,11 +558,14 @@ function TestMode:StartTest()
   lastDeathCount = 0
   lastMessage = ""
 
-  -- Set up fake best time data in Calculator
+  -- Set up fake best time data in Database
   self:setupFakeBestTime()
 
-  -- Initialize current run in Calculator
-  self:StartRun(testRunData.mapID, testRunData.keyLevel, testRunData.affixes)
+  -- Initialize current run through API
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    API:StartNewRun(testRunData.mapID, testRunData.keyLevel, testRunData.affixes)
+  end
 
   -- Start the test loop
   self:scheduleTestLoop()
@@ -532,6 +600,11 @@ function TestMode:StopTest()
   end
 
   isTestActive = false
+
+  -- Save important data before clearing testRunData
+  local mapID = testRunData and testRunData.mapID
+  local keyLevel = testRunData and testRunData.keyLevel
+
   testRunData = nil
 
   -- CRITICAL FIX: Ensure timer is properly cleaned up to prevent memory leaks
@@ -540,19 +613,23 @@ function TestMode:StopTest()
     testLoopTimer = nil
   end
 
-  -- Reset Calculator state
-  self:ResetCalculator()
+  -- Reset through API
+  local API = PushMaster.Core and PushMaster.Core.API
+  if API then
+    API:ResetCurrentRun()
+  end
 
-  -- CRITICAL FIX: Restore original best times to prevent test data from persisting
-  local Calculator = PushMaster.Data.Calculator
-  if Calculator and originalBestTimes then
-    Calculator:ImportBestTimes(originalBestTimes)
-    PushMaster:DebugPrint("Restored original best times after test mode")
-    originalBestTimes = nil
-  elseif Calculator then
-    -- If no original data was stored, clear all best times to prevent fake data persistence
-    Calculator:ClearBestTimes()
-    PushMaster:DebugPrint("Cleared all best times after test mode (no original data to restore)")
+  -- CRITICAL FIX: Restore original best run to prevent test data from persisting
+  local Database = PushMaster.Core and PushMaster.Core.Database
+  if Database and originalBestRun and mapID and keyLevel then
+    -- Restore the original best run
+    Database:SaveRun(mapID, keyLevel, originalBestRun)
+    PushMaster:DebugPrint("Restored original best run after test mode")
+    originalBestRun = nil
+  elseif Database and mapID then
+    -- If no original data was stored, we can't easily remove the fake data
+    -- This is a limitation of the current database design
+    PushMaster:DebugPrint("Warning: Test data may persist in database")
   end
 
   -- Clear MainFrame display to remove any test mode data
@@ -625,81 +702,42 @@ function TestMode:Initialize()
   PushMaster:DebugPrint("TestMode module initialized with real Calculator integration")
 end
 
----Update progress in Calculator with test data
+---Update progress through API with test data
 ---@param trash number Current trash percentage
 ---@param bosses number Current boss count
 ---@param deaths number Current death count
 ---@param stageTime number Current stage time in the test progression
 function TestMode:UpdateProgress(trash, bosses, deaths, stageTime)
-  local Calculator = PushMaster.Data.Calculator
-  if not Calculator then
+  local API = PushMaster.Core and PushMaster.Core.API
+  if not API then
     return
   end
 
-  -- Update progress data structure using the stage time, not real elapsed time
-  local progressData = {
-    trash = trash,
-    elapsedTime = stageTime -- Use the simulated stage time
-  }
+  -- Update through API
+  API:UpdateProgress(trash, bosses, deaths)
 
-  -- Update Calculator with current progress
-  Calculator:UpdateProgress(progressData)
-
-  -- Update deaths if changed
-  if deaths > lastDeathCount then
+  -- Handle death recording separately
+  local Calculator = PushMaster.Data and PushMaster.Data.Calculator
+  if Calculator and deaths > lastDeathCount then
     for i = lastDeathCount + 1, deaths do
-      Calculator:RecordDeath(testStartTime + stageTime) -- Use stage time for death recording too
+      Calculator:RecordDeath("TestPlayer" .. i)
     end
-    lastDeathCount = deaths                             -- Update the counter to prevent duplicate recordings
+    lastDeathCount = deaths
   end
 end
 
----Start a new run in Calculator for testing
----@param mapID number Map ID of the dungeon
----@param keyLevel number Key level
----@param affixes table Affix data
-function TestMode:StartRun(mapID, keyLevel, affixes)
-  local Calculator = PushMaster.Data.Calculator
-  if not Calculator then
-    PushMaster:DebugPrint("Calculator module not available")
-    return
-  end
-
-  -- Create fake instance data for Calculator
-  local instanceData = {
-    zoneName = testRunData.name,
-    currentMapID = mapID,
-    cmLevel = keyLevel,
-    affixes = affixes,
-    maxTime = testRunData.timeLimit
-  }
-
-  -- Start new run in Calculator
-  Calculator:StartNewRun(instanceData)
-
-  PushMaster:DebugPrint(string.format("Test run started in Calculator: %s +%d",
-    instanceData.zoneName, keyLevel))
-end
-
----Record a boss kill in Calculator
+---Record a boss kill through Calculator
 ---@param bossName string Name of the boss
 ---@param killTime number Time when boss was killed (elapsed time from test start)
 function TestMode:RecordBossKill(bossName, killTime)
-  local Calculator = PushMaster.Data.Calculator
+  local Calculator = PushMaster.Data and PushMaster.Data.Calculator
   if not Calculator then
     return
   end
 
-  -- killTime is already elapsed time, so just pass it directly
-  Calculator:RecordBossKill(bossName, testStartTime + killTime)
+  -- Start and end boss fight immediately for test mode
+  Calculator:StartBossFight(bossName)
+  Calculator:EndBossFight(bossName)
 
   PushMaster:DebugPrint(string.format("Test mode recorded boss kill: %s at %.1fs elapsed", bossName, killTime))
-end
-
----Reset Calculator state
-function TestMode:ResetCalculator()
-  local Calculator = PushMaster.Data.Calculator
-  if Calculator then
-    Calculator:ResetCurrentRun()
-  end
 end
