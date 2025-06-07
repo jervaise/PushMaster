@@ -82,23 +82,22 @@ local BORDER_COLORS = {
   BLUE = { 0.2, 0.5, 1.0, 1 }     -- Blue tint for recording
 }
 
--- Dungeon ID to name mapping (TWW Season 2)
-local DUNGEON_NAMES = {
-  [2649] = "Priory of the Sacred Flame",
-  [2293] = "Theater of Pain",
-  [2097] = "Operation Mechagon: Workshop",
-  [2662] = "The Stonevault",
-  [2669] = "The Rookery",
-  [2651] = "City of Threads",
-  [2660] = "Ara-Kara, City of Echoes",
-  [1822] = "Siege of Boralus",
-}
-
----Get dungeon name from ID
+---Get dungeon name from ID using WoW API
 ---@param dungeonID number The dungeon map ID
 ---@return string name The dungeon name or "Unknown Dungeon"
 local function getDungeonName(dungeonID)
-  return DUNGEON_NAMES[dungeonID] or ("Dungeon " .. tostring(dungeonID or "?"))
+  if not dungeonID then
+    return "Unknown Dungeon"
+  end
+
+  -- Use WoW API to get the actual dungeon name
+  local zoneName, _, _ = C_ChallengeMode.GetMapUIInfo(dungeonID)
+  if zoneName and zoneName ~= "" then
+    return zoneName
+  end
+
+  -- Fallback to dungeon ID if API doesn't return a name
+  return "Dungeon " .. tostring(dungeonID)
 end
 
 -- Timer for regular UI updates

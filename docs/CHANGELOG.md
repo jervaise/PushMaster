@@ -5,6 +5,23 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-01-05
+
+### Fixed
+- **Dungeon Name Display**: Fixed "Dungeon 504" and similar issues by using WoW API instead of hardcoded mappings
+- **API Integration**: Replaced hardcoded DUNGEON_NAMES mapping with proper `C_ChallengeMode.GetMapUIInfo()` calls
+- **Future Compatibility**: Addon now automatically supports new dungeons without code updates
+
+### Changed
+- **Dynamic Dungeon Names**: All dungeon names now retrieved from WoW API in real-time
+- **Localization Support**: Dungeon names automatically display in player's language
+- **Code Cleanup**: Removed obsolete hardcoded dungeon name mappings
+
+### Technical Improvements
+- **Proper API Usage**: Uses Blizzard's official API for dungeon information
+- **Maintainability**: No more manual updates needed for new dungeons
+- **Consistency**: Same approach used by other major addons
+
 ## [1.2.1] - 2025-01-05
 
 ### Fixed

@@ -25,17 +25,7 @@ local lastUpdateTime = nil
 local originalDebugMode = false -- Store original debug mode state
 local originalBestTimes = nil   -- Store original best times before test mode
 
--- Dungeon ID to name mapping (TWW Season 2) - needed for default state display
-local DUNGEON_NAMES = {
-  [2649] = "Priory of the Sacred Flame",
-  [2293] = "Theater of Pain",
-  [2097] = "Operation Mechagon: Workshop",
-  [2662] = "The Stonevault",
-  [2669] = "The Rookery",
-  [2651] = "City of Threads",
-  [2660] = "Ara-Kara, City of Echoes",
-  [1822] = "Siege of Boralus",
-}
+-- No longer need hardcoded dungeon names - using WoW API instead
 
 -- Sample run data for testing with realistic pace variations
 local SAMPLE_RUN_DATA = {
@@ -664,7 +654,10 @@ function TestMode:StopTest()
         deathProgress = nil,
         progress = { deaths = 0 },
         deathTimePenalty = 0,
-        dungeon = mapID and DUNGEON_NAMES[mapID] or "Unknown Dungeon",
+        dungeon = mapID and (function()
+          local zoneName, _, _ = C_ChallengeMode.GetMapUIInfo(mapID)
+          return zoneName and zoneName ~= "" and zoneName or ("Dungeon " .. tostring(mapID))
+        end)() or "Unknown Dungeon",
         level = keyLevel or 0,
         dungeonID = mapID or 0,
         timeDelta = nil,

@@ -1,0 +1,22 @@
+PushMaster v1.2.2 - Dynamic Dungeon Names
+
+MAJOR FIXES:
+• Fixed "Dungeon 504" and similar display issues
+• Replaced hardcoded dungeon mappings with proper WoW API calls
+• Now automatically supports all current and future dungeons
+
+IMPROVEMENTS:
+• Dynamic dungeon names retrieved from WoW API in real-time
+• Automatic localization support - displays in your language
+• Future-proof design - no code updates needed for new dungeons
+• Cleaner codebase with obsolete mappings removed
+
+TECHNICAL CHANGES:
+• Uses C_ChallengeMode.GetMapUIInfo() for dungeon information
+• Consistent with other major addons' approach
+• Better maintainability and reliability
+
+This update ensures PushMaster properly displays dungeon names for all dungeons, including new ones added by Blizzard, without requiring addon updates.
+
+Compatible with WoW 11.1.5+ (The War Within Season 2)
+Requires Mythic+ key level 12 or higher for optimal performance 
