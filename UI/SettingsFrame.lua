@@ -281,6 +281,14 @@ local function createSettingsFrame()
   elements.scaleSlider.High:SetText("150%")
   elements.scaleSlider.Text:SetText("")
 
+  -- Align scale slider labels vertically
+  elements.scaleSlider.Low:ClearAllPoints()
+  elements.scaleSlider.Low:SetPoint("BOTTOMLEFT", elements.scaleSlider, "BOTTOMLEFT", 0, -15)
+  elements.scaleSlider.High:ClearAllPoints()
+  elements.scaleSlider.High:SetPoint("BOTTOMRIGHT", elements.scaleSlider, "BOTTOMRIGHT", 0, -15)
+
+
+
   -- Performance/Accuracy slider
   local accuracyLabel = leftBox:CreateFontString(nil, "OVERLAY")
   accuracyLabel:SetFont(ADDON_FONT, 10)
@@ -308,6 +316,14 @@ local function createSettingsFrame()
   elements.accuracySlider.Low:SetText("Light")
   elements.accuracySlider.High:SetText("Aggressive")
   elements.accuracySlider.Text:SetText("")
+
+  -- Align accuracy slider labels vertically
+  elements.accuracySlider.Low:ClearAllPoints()
+  elements.accuracySlider.Low:SetPoint("BOTTOMLEFT", elements.accuracySlider, "BOTTOMLEFT", 0, -15)
+  elements.accuracySlider.High:ClearAllPoints()
+  elements.accuracySlider.High:SetPoint("BOTTOMRIGHT", elements.accuracySlider, "BOTTOMRIGHT", 0, -15)
+
+
 
   -- Add tooltip for accuracy slider
   elements.accuracySlider:SetScript("OnEnter", function(self)
@@ -462,7 +478,7 @@ local function loadSettings()
 
   -- Update version and author text from TOC metadata
   if elements.versionText then
-    local version = "1.2.2"   -- Fallback version
+    local version = "1.2.3"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first
@@ -792,7 +808,7 @@ end
 ---Refresh the footer version and author text
 function SettingsFrame:RefreshFooter()
   if elements.versionText then
-    local version = "1.2.2"   -- Fallback version
+    local version = "1.2.3"   -- Fallback version
     local author = "Jervaise" -- Fallback author
 
     -- Always try to get the latest version from TOC metadata first

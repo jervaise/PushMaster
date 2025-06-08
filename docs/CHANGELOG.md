@@ -5,6 +5,22 @@ All notable changes to PushMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2025-01-05
+
+### Fixed
+- **Settings UI Alignment**: Fixed slider text label positioning for better visual alignment
+- **Scale Slider Labels**: Properly aligned "50% 120% 150%" text vertically for scale slider
+- **Accuracy Slider Labels**: Properly aligned "Light Balanced Aggressive" text vertically for accuracy slider
+- **UI Polish**: Improved overall settings frame layout and text positioning
+
+### Changed
+- **Label Positioning**: Adjusted vertical positioning of slider value labels for consistent alignment
+- **Visual Consistency**: Enhanced settings frame visual hierarchy and spacing
+
+### Technical Improvements
+- **UI Code Cleanup**: Refined slider label positioning logic in settings frame
+- **Layout Optimization**: Improved text element positioning for better user experience
+
 ## [1.2.2] - 2025-01-05
 
 ### Fixed
